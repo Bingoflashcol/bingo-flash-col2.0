@@ -1,0 +1,448 @@
+*{box-sizing:border-box}
+:root{
+  --bg1:#082a7d; --bg2:#031b55; --bg3:#1e3a8a; --neon1:#12d6ff; --neon2:#a855f7;
+  --text:#e5e7eb; --muted:#aab6cc;
+  --chip:#0e132b; --stroke:#1f2a44;
+  --B:#2b6eea; --I:#e23b3b; --N:#19b05a; --G:#e0b317; --O:#8b4df0;
+  --accent:#22d3ee;
+  --col-width: 56px; /* ancho exacto columna */
+  --row-gap: 6px;    /* gap vertical */
+  --ball-size: 35px; /* diámetro fijo bola */
+}
+html,body{height:100%}
+body{
+  margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial;color:var(--text);
+  background:
+    radial-gradient(900px 500px at 85% 20%, color-mix(in srgb,var(--neon2),transparent 65%), transparent 70%),
+    radial-gradient(900px 500px at 5% 80%, color-mix(in srgb,var(--neon1),transparent 70%), transparent 72%),
+    linear-gradient(160deg,var(--bg1),var(--bg2) 40%, var(--bg3));
+}
+.topbar{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid #1f2a44;background:rgba(0,0,0,.35);backdrop-filter:blur(6px)}
+.brand{font-weight:900;font-size:20px;letter-spacing:.4px;display:flex;gap:6px;align-items:center}
+.brand .b{color:var(--B)} .brand .i{color:var(--I)} .brand .n{color:var(--N)} .brand .g{color:var(--G)} .brand .o{color:var(--O)}
+.toggles{display:flex;gap:10px;align-items:center;font-size:14px}
+label.inline{display:flex;gap:6px;align-items:center}
+input[type="range"]{accent-color:var(--accent)}
+
+/* Layout */
+.layout{display:grid;grid-template-columns:340px 1fr;gap:12px;padding:12px}
+.left .panel{background:rgba(255,255,255,.05);border:1px solid var(--stroke);border-radius:16px;padding:12px;}
+.current{display:flex;gap:10px;align-items:center;justify-content:flex-start;margin:8px 0 12px 0}
+.letter{font-size:38px;font-weight:900}
+.ball{font-size:56px;font-weight:900;border:3px solid var(--accent);border-radius:16px;min-width:84px;text-align:center;padding:6px;background:#00131a;color:var(--accent)}
+.controls{display:flex;gap:8px;margin:6px 0}
+button{background:var(--accent);border:1px solid #0891b2;color:#00131a;padding:8px 12px;border-radius:10px;font-weight:800;cursor:pointer}
+button.secondary{background:#3f4a5f;border-color:#2c3445;color:#e5e7eb}
+button.danger{background:#ef4444;border-color:#7f1d1d;color:#fff}
+button.primary{background:#10b981;border-color:#065f46;color:#00130f}
+
+/* Tablero: alto completo y fijo de ancho como tu mockup */
+.right h2{margin:6px 0 10px}
+.board-wrap{
+  background:rgba(0,0,0,.35);border:2px solid #343c57;border-radius:12px;
+  padding:10px;max-width:calc(var(--col-width)*5 + 8px*4 + 20px);
+  height:calc(100vh - 160px);
+  display:flex;flex-direction:column;
+}
+/* Encabezado BINGO con colores y glow */
+.board-header{display:grid;grid-template-columns:repeat(5,var(--col-width));gap:8px;margin-bottom:8px}
+.hchip{display:flex;align-items:center;justify-content:center;
+  background:#0c122a;border:1px solid #2a3456;border-radius:10px;padding:4px 0;
+  font-weight:1000;font-size:14px;letter-spacing:.6px;color:#fff;text-shadow:0 0 6px rgba(255,255,255,.25);
+}
+.hchip.b{color:var(--B); text-shadow:0 0 6px color-mix(in srgb,var(--B),white 20%);}
+.hchip.i{color:var(--I); text-shadow:0 0 6px color-mix(in srgb,var(--I),white 20%);}
+.hchip.n{color:var(--N); text-shadow:0 0 6px color-mix(in srgb,var(--N),white 20%);}
+.hchip.g{color:var(--G); text-shadow:0 0 6px color-mix(in srgb,var(--G),white 20%);}
+.hchip.o{color:var(--O); text-shadow:0 0 6px color-mix(in srgb,var(--O),white 20%);}
+
+/* Grilla de 15 filas: reparte el espacio vertical SIN deformar la bola (bola fija 30px) */
+.board{
+  display:grid;grid-template-columns:repeat(5,var(--col-width));gap:8px;
+  align-content:space-between; /* reparte verticalmente */
+  flex:1 1 auto;
+}
+.col{
+  display:grid;grid-template-rows:repeat(15, minmax(var(--ball-size), 1fr));
+  gap:var(--row-gap);justify-items:center;align-content:space-between;
+}
+/* Bolitas circulares SIEMPRE */
+.chip{
+  width:var(--ball-size); height:var(--ball-size);
+  border-radius:999px;border:2px solid #2a3456;
+  background:var(--chip); color:var(--muted);
+  display:flex;align-items:center;justify-content:center;
+  font-weight:900;font-size:13px;
+  transition:transform .12s, box-shadow .12s, background .12s, color .12s;
+}
+/* Estado cantada */
+.chip.hit{transform:scale(1.06)}
+.col.b .chip.hit{background:var(--B);border-color:var(--B);color:#fff;box-shadow:0 0 8px color-mix(in srgb,var(--B),black 10%)}
+.col.i .chip.hit{background:var(--I);border-color:var(--I);color:#fff;box-shadow:0 0 8px color-mix(in srgb,var(--I),black 10%)}
+.col.n .chip.hit{background:var(--N);border-color:var(--N);color:#fff;box-shadow:0 0 8px color-mix(in srgb,var(--N),black 10%)}
+.col.g .chip.hit{background:var(--G);border-color:var(--G);color:#fff;box-shadow:0 0 8px color-mix(in srgb,var(--G),black 10%)}
+.col.o .chip.hit{background:var(--O);border-color:var(--O);color:#fff;box-shadow:0 0 8px color-mix(in srgb,var(--O),black 10%)}
+
+/* Exportador (combos) */
+#panel-exportar .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+#panel-exportar input[type="text"],#panel-exportar input[type="tel"],#panel-exportar input[type="number"],#panel-exportar select{
+  background:#0b1322;border:1px solid #2b3a55;border-radius:8px;color:#e8f0ff;padding:8px 10px
+}
+#panel-exportar .danger{background:#e74c3c;border:1px solid #e74c3c;border-radius:8px;padding:8px 12px;color:#fff}
+#panel-exportar .primary{background:#1f7aec;border:1px solid #1f7aec;border-radius:8px;padding:8px 12px;color:#fff}
+#panel-exportar .hint{opacity:.75}
+
+/* Exportador (combos) */
+#panel-exportar .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+#panel-exportar input[type="text"],#panel-exportar input[type="tel"],#panel-exportar input[type="number"],#panel-exportar select{background:#0b1322;border:1px solid #2b3a55;border-radius:8px;color:#e8f0ff;padding:8px 10px}
+#panel-exportar .danger{background:#e74c3c;border:1px solid #e74c3c;border-radius:8px;padding:8px 12px;color:#fff}
+#panel-exportar .primary{background:#1f7aec;border:1px solid #1f7aec;border-radius:8px;padding:8px 12px;color:#fff}
+#panel-exportar .hint{opacity:.75}
+
+/* participantes & overlay */
+.tag{display:inline-block;padding:.15rem .45rem;border-radius:999px;font-size:.85em;border:1px solid rgba(255,255,255,.2)}
+.tag.reservado{background:#fde68a;color:#78350f}
+.tag.pago{background:#bbf7d0;color:#065f46}
+.tag.pendiente{background:#e5e7eb;color:#111827}
+button.mini{font-size:.8em;padding:.25rem .45rem}
+#participants-overlay .table th,#participants-overlay .table td{border-bottom:1px solid rgba(255,255,255,.08);padding:.4rem .5rem}
+#participants-filters input[type=search], #participants-filters select{padding:.35rem .5rem;border:1px solid rgba(255,255,255,.2);border-radius:.5rem;background:#0f172a;color:#e5e7eb}
+#top-body{transition:all .15s ease-in-out}
+
+
+/* === Manual Capacity / Progress === */
+.cap-widget{ position:fixed; right:16px; top:78px; z-index:900; background:rgba(0,0,0,.35); backdrop-filter: blur(6px);
+  border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:1px 10px; color:#fff; min-width:352px; }
+.cap-widget h4{ margin:0 0 6px 0; font-size:12px; font-weight:600; letter-spacing:.0.8px; display:flex; align-items:center; gap:.5rem; }
+.cap-bar{ height:10px; background:rgba(255,255,255,.15); border-radius:8px; overflow:hidden; }
+.cap-bar > span{ display:block; height:100%; width:0%; background:linear-gradient(90deg, #22d3ee, #10b981); transition:width .25s ease; }
+.cap-meta{ display:flex; justify-content:space-between; font-size:11px; opacity:.85; margin-top:6px; }
+.button-tiny{ font-size:11px; padding:.25rem .5rem; border-radius:8px; background:#0ea5e9; color:#fff; border:none; cursor:pointer; }
+.button-tiny:hover{ filter:brightness(1.05); }
+
+/* Overlay for Capacity */
+#cap-backdrop{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1200; }
+#cap-panel{ display:none; position:fixed; inset:0; z-index:1201; align-items:center; justify-content:center; }
+#cap-panel .card{ width:min(680px, 92vw); background:#0b1220; color:#e5e7eb; border:1px solid rgba(255,255,255,.1);
+  border-radius:14px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+#cap-panel header{ display:flex; justify-content:space-between; align-items:center; padding:14px 16px; border-bottom:1px solid rgba(255,255,255,.1); }
+#cap-panel header h3{ margin:0; font-size:16px; }
+#cap-panel .body{ padding:14px 16px; display:grid; gap:.75rem; grid-template-columns: 1fr 1fr; }
+#cap-panel .row{ display:flex; flex-direction:column; gap:.35rem; }
+#cap-panel .row input[type="number"]{ padding:.5rem; border-radius:10px; border:1px solid rgba(255,255,255,.12); background:#0f172a; color:#fff; }
+#cap-panel .row input[type="range"]{ width:100%; }
+#cap-panel footer{ display:flex; justify-content:flex-end; gap:.5rem; padding:14px 16px; border-top:1px solid rgba(255,255,255,.1); }
+#cap-open{ margin-left:.5rem; }
+
+#cap-progress, #cap-progress-number { display:none !important; }
+
+#cap-meta-left{ display:none !important; }
+
+
+/* Logo Bingo Flash Tradicional */
+.brand{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+
+.brand-main{
+  font-weight:800;
+  font-size:1.6rem;
+  letter-spacing:0.18em;
+  text-transform:uppercase;
+  display:flex;
+  gap:0.15rem;
+}
+
+.brand-main .b{ color:var(--B); }
+.brand-main .i{ color:var(--I); }
+.brand-main .n{ color:var(--N); }
+.brand-main .g{ color:var(--G); }
+.brand-main .o{ color:var(--O); }
+
+.brand-sub{
+  font-weight:600;
+  font-size:1rem;
+  display:flex;
+  gap:0.4rem;
+  align-items:flex-end;
+}
+
+.brand-sub .flash{
+  color:#f9fafb;
+}
+
+.brand-sub .trad{
+  background:linear-gradient(90deg,#f97316,#facc15,#22c55e,#0ea5e9,#6366f1,#ec4899);
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+}
+
+.brand::after{
+  content:"";
+  display:block;
+  margin-top:3px;
+  height:3px;
+  border-radius:999px;
+  background:linear-gradient(90deg,#22c55e,#0ea5e9,#6366f1,#f97316,#ef4444);
+  opacity:.9;
+}
+
+
+/* Logo en una sola línea, degradado como en el diseño original */
+.brand{
+  display:flex;
+  align-items:center;
+  font-weight:900;
+  font-size:24px;
+  letter-spacing:.4px;
+}
+
+.brand-logo-text{
+  background:linear-gradient(90deg,#22c55e,#0ea5e9,#6366f1,#f97316,#facc15,#22c55e,#a855f7,#ec4899);
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+}
+
+
+/* === BF: Celebración de ganador (confeti + luces) === */
+.bf-confetti-overlay{
+  pointer-events:none;
+  position:fixed;
+  inset:0;
+  overflow:hidden;
+  z-index:99999;
+}
+.bf-confetti-piece{
+  position:absolute;
+  top:-10vh;
+  width:10px;
+  height:14px;
+  border-radius:2px;
+  background:linear-gradient(135deg,#fde047,#fb7185);
+  opacity:0.9;
+  animation-name:bf-confetti-fall;
+  animation-timing-function:linear;
+  animation-iteration-count:1;
+}
+.bf-confetti-piece:nth-child(3n){
+  background:linear-gradient(135deg,#22c55e,#0ea5e9);
+}
+.bf-confetti-piece:nth-child(4n){
+  background:linear-gradient(135deg,#a855f7,#f97316);
+}
+.bf-confetti-overlay:not(.bf-confetti-active){
+  display:none;
+}
+.bf-confetti-active{
+  display:block;
+}
+
+@keyframes bf-confetti-fall{
+  0%{
+    transform:translate3d(0,-10vh,0) rotateZ(0deg);
+    opacity:0;
+  }
+  10%{
+    opacity:1;
+  }
+  100%{
+    transform:translate3d(0,110vh,0) rotateZ(360deg);
+    opacity:0;
+  }
+}
+
+body.bf-win-flash{
+  animation:bf-win-flash-bg 0.8s ease-out 2;
+}
+@keyframes bf-win-flash-bg{
+  0%{
+    box-shadow:0 0 0 0 rgba(250,204,21,0);
+    background-image:radial-gradient(circle at top,#f97316 0,#020617 60%);
+  }
+  50%{
+    box-shadow:0 0 0 4px rgba(250,204,21,0.3);
+    background-image:radial-gradient(circle at top,#22c55e 0,#020617 60%);
+  }
+  100%{
+    box-shadow:0 0 0 0 rgba(250,204,21,0);
+    background-image:none;
+  }
+}
+
+
+/* BF: Historial de ganadores */
+.bf-history-card{
+  max-width:480px;
+  max-height:70vh;
+  overflow:auto;
+}
+.bf-history-list{
+  margin-top:0.75rem;
+  font-size:.9rem;
+  display:flex;
+  flex-direction:column;
+  gap:.35rem;
+}
+.bf-history-item strong{
+  font-weight:600;
+}
+.bf-history-item small{
+  opacity:.7;
+  margin-left:.25rem;
+}
+
+
+/* BF: Barra de progreso automática por evento (cartones impresos) */
+.bf-progress{
+  position:relative;
+  width:100%;
+  height:10px;
+  border-radius:999px;
+  overflow:hidden;
+  background:rgba(15,23,42,.75);
+  border:1px solid rgba(148,163,184,.6);
+}
+.bf-progress-inner{
+  position:absolute;
+  inset:0;
+  width:0%;
+  background:linear-gradient(90deg,#22c55e,#0ea5e9);
+  transition:width .25s ease-out;
+}
+
+
+/* Splash de inicio */
+.splash{
+  position:fixed;
+  inset:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  background:
+    radial-gradient(circle at 50% 30%, rgba(33,150,243,.25), transparent 60%),
+    radial-gradient(circle at 20% 80%, rgba(156,39,176,.25), transparent 65%),
+    #020617;
+  z-index:1500;
+  animation: bgMove 12s ease-in-out infinite alternate;
+}
+
+.splash img{
+  max-width:260px;
+  margin-bottom:18px;
+}
+
+.splash-sub{
+  font-size: clamp(32px, 4vw, 52px);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: #ffffff;
+  margin-top: 32px;
+  margin-bottom: 40px;
+  text-align: center;
+  animation: softPulse 2.6s ease-in-out infinite;
+}
+
+@keyframes bgMove {
+  0%{ background-position: 50% 30%, 20% 80%; }
+  100%{ background-position: 60% 40%, 10% 90%; }
+}
+
+@keyframes softPulse{
+  0%,100%{
+    transform: scale(1);
+    text-shadow:0 0 18px rgba(56,189,248,0.6);
+  }
+  50%{
+    transform: scale(1.08);
+    text-shadow:0 0 32px rgba(56,189,248,1);
+  }
+}
+
+/* Historial últimos números */
+.history{
+  margin-top:8px;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+.history-label{
+  font-size:12px;
+  opacity:.75;
+}
+.history-list{
+  display:flex;
+  gap:6px;
+  flex-wrap:wrap;
+}
+.history-list .hitem{
+  min-width:40px;
+  height:40px;
+  border-radius:999px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:800;
+  font-size:14px;
+  background:rgba(15,23,42,.95);
+  border:1px solid rgba(148,163,184,.6);
+}
+
+/* Bola actual pulso */
+.ball.is-new{
+  animation:pulse-glow .5s ease-out;
+}
+@keyframes pulse-glow{
+  0%{
+    transform:scale(0.6);
+    box-shadow:0 0 0 rgba(34,211,238,0);
+  }
+  60%{
+    transform:scale(1.1);
+    box-shadow:0 0 24px rgba(34,211,238,.8);
+  }
+  100%{
+    transform:scale(1);
+    box-shadow:0 0 12px rgba(34,211,238,.4);
+  }
+}
+
+/* Bola voladora */
+.fly-overlay{
+  position:fixed;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  pointer-events:none;
+  z-index:1400;
+  opacity:0;
+  transition:opacity .15s;
+}
+.fly-overlay.show{
+  opacity:1;
+}
+.fly-ball{
+  width:120px;
+  height:120px;
+  border-radius:999px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:42px;
+  font-weight:900;
+  background:radial-gradient(circle at 30% 20%, #ffffff, #e5e7eb 40%, #0ea5e9 100%);
+  box-shadow:0 0 30px rgba(56,189,248,.8);
+  color:#0f172a;
+  text-shadow:0 0 6px rgba(15,23,42,.25);
+}
+
+/* ==== Ajustes solo para ventana Modo presentador ==== */
+body.presenter-body #bfw-container .bfw-row{
+  display:none !important;
+}

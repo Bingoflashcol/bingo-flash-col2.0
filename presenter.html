@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bingo Flash - Modo presentador</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="figuras-bingo.css" />
+</head>
+<body class="presenter-body">
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-logo-text">Bingo Flash Tradicional</span>
+  </div>
+
+  <button id="btn-historial" class="secondary" style="margin-left:.5rem">🏅 Historial ganadores</button>
+</header>
+
+<main class="layout">
+  <aside class="left">
+    <div class="panel">
+      <h3>Bola actual</h3>
+      <div class="current">
+        <div class="letter" id="presenter-curLetter">—</div>
+        <div class="ball" id="presenter-curBall">—</div>
+      </div>
+      <div class="history">
+        <span class="history-label">Últimos números:</span>
+        <div id="presenter-historyList" class="history-list"></div>
+      </div>
+    </div>
+  </aside>
+
+  <section class="right">
+    <h2>Números cantados</h2>
+    <div class="board-wrap">
+      <div class="board-header">
+        <div class="hchip b">B</div>
+        <div class="hchip i">I</div>
+        <div class="hchip n">N</div>
+        <div class="hchip g">G</div>
+        <div class="hchip o">O</div>
+      </div>
+      <div id="presenter-board" class="board"></div>
+    </div>
+  </section>
+</main>
+
+<!-- Overlay para la bola voladora en la ventana de presentador -->
+<div id="flyOverlayPresenter" class="fly-overlay"></div>
+
+<script src="figuras-bingo.js" defer></script>
+<script src="presenter.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    if (window.initBingoFiguresWidget) {
+      // Igual que en la ventana principal: crea el widget TUS PREMIOS
+      initBingoFiguresWidget({ title: "TUS PREMIOS" });
+    }
+  });
+</script>
+<div id="bf-history-modal" class="bf-modal" style="display:none">
+  <div class="bf-card bf-history-card">
+    <h3>Historial de ganadores</h3>
+    <div id="bf-history-list" class="bf-history-list"></div>
+    <button id="bf-history-close" class="primary" style="margin-top:0.75rem">Cerrar</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  function loadEventsDB(){
+    try{
+      return JSON.parse(localStorage.getItem('bingo_events')||'{}');
+    }catch(_){
+      return {};
+    }
+  }
+  function getCurrentEventId(){
+    try{
+      if (window.opener && !window.opener.closed){
+        var srcDoc = window.opener.document;
+        var el = srcDoc.querySelector('#eventId');
+        var v = (el && el.value || '').trim();
+        return v || 'default';
+      }
+    }catch(_){}
+    return 'default';
+  }
+  function renderHistory(){
+    var list = document.getElementById('bf-history-list');
+    if(!list) return;
+    var db = loadEventsDB();
+    var evt = getCurrentEventId();
+    var ev = db[evt] || {};
+    var hist = Array.isArray(ev.winHistory) ? ev.winHistory.slice() : [];
+    hist.sort(function(a,b){ return (a.at||0) - (b.at||0); });
+    list.innerHTML = '';
+    if(hist.length === 0){
+      var empty = document.createElement('div');
+      empty.textContent = 'Aún no hay ganadores registrados para este evento.';
+      empty.style.opacity = '0.7';
+      list.appendChild(empty);
+      return;
+    }
+    hist.forEach(function(entry){
+      var row = document.createElement('div');
+      row.className = 'bf-history-item';
+      var title = document.createElement('div');
+      title.className = 'bf-history-title';
+      var strong = document.createElement('strong');
+      strong.textContent = entry.figName || 'Premio';
+      var small = document.createElement('small');
+      small.textContent = ' — ' + (entry.tipo || '');
+      title.appendChild(strong);
+      title.appendChild(small);
+      row.appendChild(title);
+      if (entry.winners && entry.winners.length){
+        var body = document.createElement('div');
+        body.textContent = entry.winners.join(', ');
+        row.appendChild(body);
+      }
+      list.appendChild(row);
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    var btn = document.getElementById('btn-historial');
+    var modal = document.getElementById('bf-history-modal');
+    var closeBtn = document.getElementById('bf-history-close');
+    if(btn && modal){
+      btn.addEventListener('click', function(){
+        renderHistory();
+        modal.style.display = 'flex';
+        modal.style.pointerEvents = 'none';
+        var card = modal.querySelector('.bf-card');
+        if(card){
+          card.style.pointerEvents = 'auto';
+        }
+      });
+    }
+    if(closeBtn && modal){
+      closeBtn.addEventListener('click', function(){
+        modal.style.display = 'none';
+      });
+    }
+  });
+})();
+</script>
+</body>
+</html>

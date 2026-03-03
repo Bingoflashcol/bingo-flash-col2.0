@@ -1,0 +1,331 @@
+
+/* ===== Participantes (overlay + filtros + top plegable + export PDF) ===== */
+(() => {
+  const $ = (s, c=document) => c.querySelector(s);
+  const $$ = (s, c=document) => Array.from(c.querySelectorAll(s));
+  const norm = (s)=>String(s||'').trim();
+
+  function loadDB(){ try{return JSON.parse(localStorage.getItem('bingo_events')||'{}');}catch{ return {}; } }
+  function saveDB(db){ localStorage.setItem('bingo_events', JSON.stringify(db)); }
+  function ensureEvent(db, evt){
+    db[evt] = db[evt] || { cards:{}, seq:0, buyers:{}, combos_total:0, individuales_total:0, meta:{} };
+    db[evt].participants = db[evt].participants || {};
+  }
+
+  function __bf_getEventComboSize(){
+    try{
+      const evt = (document.querySelector('#eventId')?.value||'').trim();
+      const db  = JSON.parse(localStorage.getItem('bingo_events')||'{}');
+      const cs  = db?.[evt]?.meta?.comboSize;
+      const n   = parseInt(cs,10);
+      return (n && n>0) ? n : 6;
+    }catch(_){ return 6; }
+  }
+  function __bf_getEventName(){
+    try{
+      const evt = (document.querySelector('#eventId')?.value||'').trim();
+      const db  = JSON.parse(localStorage.getItem('bingo_events')||'{}');
+      return db?.[evt]?.meta?.name || evt || 'Bingo Flash Tradicional';
+    }catch(_){ return 'Bingo Flash Tradicional'; }
+  }
+
+  function __bf_readBuyer(){
+    const cand = ['#buyerName', '#buyer', '#comprador', 'input[name="buyer"]', '#p-name'];
+    let name='', phone='';
+    for(const sel of cand){
+      const el = document.querySelector(sel);
+      if(el && el.value){ name = String(el.value||'').trim(); break; }
+    }
+    const pcand = ['#buyerPhone', '#celular', 'input[name="phone"]', '#p-phone'];
+    for(const sel of pcand){
+      const el = document.querySelector(sel);
+      if(el && el.value){ phone = String(el.value||'').trim(); break; }
+    }
+    // solo usar lastBuyer si amobos están vacíos
+    try{
+      if((!name || name.length<1) && (!phone || phone.length<1)){
+        const evt = (document.querySelector('#eventId')?.value||'').trim();
+        const db = JSON.parse(localStorage.getItem('bingo_events')||'{}');
+        const lb = db?.[evt]?.meta?.lastBuyer;
+        if(lb?.name)  name  = lb.name;
+        if(lb?.phone) phone = lb.phone;
+      }
+    }catch(_){}
+    return {name, phone};
+  }
+
+  function __bf_findExistingKey(parts, buyer){
+    const n = (String(buyer?.name||'').trim().toLowerCase());
+    const ph = (String(buyer?.phone||'').trim());
+    let found = null;
+    const entries = Object.entries(parts||{});
+    if(ph){
+      for(const [k,p] of entries){
+        const pph = String(p?.phone||'').trim();
+        if(pph && pph === ph){ found = k; break; }
+      }
+      if(!found && n){
+        for(const [k,p] of entries){
+          const pph = String(p?.phone||'').trim();
+          const pn  = String(p?.name||'').trim().toLowerCase();
+          if(!pph && pn === n){ found = k; break; }
+        }
+      }
+    } else if(n){
+      for(const [k,p] of entries){
+        const pn  = String(p?.name||'').trim().toLowerCase();
+        if(pn === n){ found = k; break; }
+      }
+    }
+    return found;
+  }
+  function __bf_generateKey(parts, buyer){
+    const n = (String(buyer?.name||'').trim().toLowerCase());
+    const ph = (String(buyer?.phone||'').trim());
+    let base = ph ? ('tel:'+ph) : ('name:'+n);
+    let k = base; let i=1;
+    while(parts && Object.prototype.hasOwnProperty.call(parts, k)){ k = base+'#'+(++i); }
+    return k;
+  }
+
+  function addOrUpdateParticipant(evt, buyer, deltaCombos=0, deltaIndiv=0){
+    const db=loadDB(); ensureEvent(db, evt);
+    const parts = db[evt].participants;
+    let k = __bf_findExistingKey(parts, buyer);
+    if(!k){ k = __bf_generateKey(parts, buyer); }
+    const cur0 = parts[k];
+    const cur = cur0 || {name:'', phone:'', combos:0, individuales:0, status:'pendiente'};
+    const bn = String(buyer?.name||'').trim();
+    const bp = String(buyer?.phone||'').trim();
+    if(!cur.name && bn) cur.name = bn;
+    if(!cur.phone && bp) cur.phone = bp;
+    if(cur.name && bn && cur.name.toLowerCase()!==bn.toLowerCase() && bp && cur.phone===bp){
+      cur.name = bn;
+    }
+    cur.combos = (cur.combos|0) + (deltaCombos|0);
+    cur.individuales = (cur.individuales|0) + (deltaIndiv|0);
+    if(!(cur.name||cur.phone||cur.combos||cur.individuales)){
+    } else {
+      parts[k] = cur;
+    }
+    db[evt].meta = db[evt].meta || {};
+    if(cur.name || cur.phone){ db[evt].meta.lastBuyer = {name: cur.name||'', phone: cur.phone||''}; }
+    saveDB(db);
+    renderList(evt);
+  }
+
+  function setStatus(evt, k, status){
+    const db=loadDB(); ensureEvent(db, evt);
+    if(db[evt].participants[k]){ db[evt].participants[k].status = status; saveDB(db); renderList(evt); }
+  }
+  function removeParticipant(evt, k){
+    const db=loadDB(); ensureEvent(db, evt);
+    delete db[evt].participants[k]; saveDB(db); renderList(evt);
+  }
+  function getCurrentEvent(){ return norm(document.querySelector('#eventId')?.value||""); }
+
+  function renderList(evt=getCurrentEvent()){
+    const tableBody = $('#participants-tbody'); if(!tableBody) return;
+    const db = loadDB(); ensureEvent(db, evt);
+
+    const q = (document.querySelector('#p-search')?.value||'').toLowerCase().trim();
+    const st = (document.querySelector('#p-status')?.value||'').trim();
+
+    let entries = Object.entries(db[evt].participants)
+      .filter(([k,p]) => (p && (p.name || p.phone || p.combos || p.individuales)));
+
+    if(q){ entries = entries.filter(([k,p])=> (String(p.name||'').toLowerCase().includes(q) || String(p.phone||'').toLowerCase().includes(q))); }
+    if(st){ entries = entries.filter(([k,p])=> (String(p.status||'')===st)); }
+
+    entries = entries.sort((a,b)=> (String(a[1].name||'').toLowerCase()).localeCompare(String(b[1].name||'').toLowerCase()));
+
+    const rows = entries.map(([k,p])=>`
+      <tr data-k="${k}">
+        <td>${p.name||''}</td>
+        <td>${p.phone||''}</td>
+        <td style="text-align:center">${p.combos|0}</td>
+        <td style="text-align:center">${p.individuales|0}</td>
+        <td><span class="tag ${p.status||'pendiente'}">${p.status||'pendiente'}</span></td>
+        <td>
+          <button class="mini set-res" data-k="${k}">Reservado</button>
+          <button class="mini set-pago" data-k="${k}">Pago</button>
+          <button class="mini danger del" data-k="${k}">Eliminar</button>
+        </td>
+      </tr>`).join('');
+    tableBody.innerHTML = rows || `<tr><td colspan="6" style="opacity:.7">Sin participantes aún.</td></tr>`;
+
+    $$('.set-res', tableBody).forEach(b=>b.addEventListener('click', e=>setStatus(evt, e.currentTarget.dataset.k, 'reservado')));
+    $$('.set-pago', tableBody).forEach(b=>b.addEventListener('click', e=>setStatus(evt, e.currentTarget.dataset.k, 'pago')));
+    $$('.del', tableBody).forEach(b=>b.addEventListener('click', e=>{ if(confirm('¿Eliminar participante?')) removeParticipant(evt, e.currentTarget.dataset.k); }));
+  }
+
+  function computeTop(evt, mode, n){
+    const eventId = (evt || (document.querySelector('#eventId')?.value||'').trim());
+    const sortMode = (mode || (document.querySelector('#top-mode')?.value||'total'));
+    const limit = Math.max(3, Math.min(100, parseInt(n ?? (document.querySelector('#top-n')?.value||'10'), 10) || 10));
+    let rows = [];
+    try{
+      const db = JSON.parse(localStorage.getItem('bingo_events')||'{}');
+      const participants = db?.[eventId]?.participants || {};
+      const comboSize = __bf_getEventComboSize();
+      rows = Object.values(participants).map(p=>{
+        const combos = (p?.combos|0);
+        const indiv  = (p?.individuales|0);
+        const total  = combos*comboSize + indiv;
+        return { name:(p?.name||''), phone:(p?.phone||''), combos, individuales:indiv, total, status:(p?.status||'pendiente') };
+      });
+      const key = (sortMode==='combos'||sortMode==='individuales') ? sortMode : 'total';
+      rows.sort((a,b)=> (b[key]-a[key]) || a.name.localeCompare(b.name));
+      rows = rows.slice(0, limit);
+    }catch(_){ rows=[]; }
+    return rows;
+  }
+  function renderTop(){
+    const tbody = document.querySelector('#top-tbody'); if(!tbody) return;
+    const rows = computeTop();
+    tbody.innerHTML = rows.map((r,i)=>`
+      <tr data-k="${k}">
+        <td>${i+1}</td>
+        <td>${r.name}</td>
+        <td>${r.phone||''}</td>
+        <td style="text-align:center">${r.combos}</td>
+        <td style="text-align:center">${r.individuales}</td>
+        <td style="text-align:center">${r.total}</td>
+        <td><span class="tag ${r.status}">${r.status}</span></td>
+      </tr>
+    `).join('') || `<tr><td colspan="7" style="opacity:.7">Sin datos suficientes.</td></tr>`;
+  }
+
+  // Exportar PDF (bonito)
+  
+
+function exportParticipantsPDF(){
+  const evt = (document.querySelector('#eventId')?.value||'').trim();
+  const db  = (function(){ try{return JSON.parse(localStorage.getItem('bingo_events')||'{}');}catch{return{};} })();
+  const parts = (db?.[evt]?.participants)||{};
+  const comboSize = (window.__BF_getEventComboSize?.() || (window.__bf_getEventComboSize?.()||6));
+  const rows = Object.values(parts).filter(p => p && (p.name||p.phone||p.combos||p.individuales));
+
+  const totals = rows.reduce((acc,p)=>{
+    const combos=(p.combos|0), indiv=(p.individuales|0);
+    acc.participants += 1;
+    acc.combos += combos; acc.indiv += indiv;
+    acc.totalCartones += combos*comboSize + indiv;
+    return acc;
+  }, {participants:0, combos:0, indiv:0, totalCartones:0});
+
+  const now = new Date();
+  const ts = now.toISOString().replace(/[:T]/g,'-').slice(0,16);
+
+  function esc(s){ return String(s).replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)'); }
+
+  const marginL = 40, marginT = 40, lineH = 14;
+  let y = 842 - marginT;
+  const ops = [];
+  function line(txt, size, dx){ y -= lineH; ops.push(`BT /F1 ${size} Tf ${marginL+(dx||0)} ${y} Td (${esc(txt)}) Tj ET`); }
+  line(`Lista de participantes — Evento: ${evt||'sin-id'}`, 14, 0);
+  line(`Generado: ${now.toLocaleDateString()} ${now.toLocaleTimeString()}`, 10, 0);
+  line(`Tamaño del combo: ${comboSize}  |  Total participantes: ${totals.participants}  |  Cartones: ${totals.totalCartones}`, 10, 0);
+  line(``, 10, 0);
+  let headersY = y-4;
+  const cols = [0, 220, 360, 430, 510];
+  const headers = ["Nombre","Celular","Combos","Individuales","Estado"];
+  y = headersY;
+  headers.forEach((h,i)=>{ ops.push(`BT /F1 11 Tf ${marginL+cols[i]} ${y} Td (${esc(h)}) Tj ET`); });
+  y -= 6; ops.push(`0.8 w ${marginL} ${y} m ${595-marginL} ${y} l S`);
+  rows.forEach((p)=>{
+    y -= lineH;
+    if(y<60){ ops.push('%%NP%%'); y = 842 - marginT - lineH; }
+    const vals = [p.name||'', p.phone||'', String(p.combos|0), String(p.individuales|0), p.status||'pendiente'];
+    vals.forEach((v,i)=>{ ops.push(`BT /F1 10 Tf ${marginL+cols[i]} ${y} Td (${esc(v)}) Tj ET`); });
+  });
+
+  const pages = []; let cur=[];
+  ops.forEach(op=>{ if(op==='%%NP%%'){ pages.push(cur.join('\n')+'\n'); cur=[]; } else { cur.push(op); } });
+  pages.push(cur.join('\n')+'\n');
+
+  const objects = [];
+  function add(obj){ objects.push(obj); return objects.length; }
+  const font = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  const pageNums = [], contentNums = [];
+  pages.forEach(pgOps=>{
+    const stream = `<< /Length ${pgOps.length} >>\nstream\n${pgOps}endstream\n`;
+    const cObj = add(stream);
+    contentNums.push(cObj);
+    const pObj = add(`<< /Type /Page /Parent 0 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${font} 0 R >> >> /Contents ${cObj} 0 R >>`);
+    pageNums.push(pObj);
+  });
+  const kids = pageNums.map(n=>`${n} 0 R`).join(' ');
+  const pagesObj = add(`<< /Type /Pages /Kids [ ${kids} ] /Count ${pageNums.length} >>`);
+  const catalogObj = add(`<< /Type /Catalog /Pages ${pagesObj} 0 R >>`);
+
+  for(let i=0;i<objects.length;i++){
+    if(objects[i].includes('/Parent 0 0 R')){
+      objects[i] = objects[i].replace('/Parent 0 0 R', `/Parent ${pagesObj} 0 R`);
+    }
+  }
+
+  let pdf = '%PDF-1.4\n';
+  const offsets = [];
+  let pos = pdf.length;
+  objects.forEach((obj, idx)=>{
+    offsets.push(pos);
+    const chunk = `${idx+1} 0 obj\n${obj}\nendobj\n`;
+    pdf += chunk;
+    pos += chunk.length;
+  });
+  const xrefPos = pos;
+  pdf += `xref\n0 ${objects.length+1}\n0000000000 65535 f \n`;
+  offsets.forEach(off=>{ pdf += `${String(off).padStart(10,'0')} 00000 n \n`; });
+  pdf += `trailer\n<< /Size ${objects.length+1} /Root ${catalogObj} 0 R >>\nstartxref\n${xrefPos}\n%%EOF`;
+
+  const blob = new Blob([pdf], {type:'application/pdf'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `ListaParticipantes_${(evt||'evento')}_${ts}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1200);
+}
+
+  function wireForm(){
+    const form = $('#participants-form'); if(!form) return;
+    form.addEventListener('submit', (e)=>{
+      e.preventDefault();
+      const evt = getCurrentEvent(); if(!evt){ alert('Primero selecciona/ingresa un Evento.'); return; }
+      const buyer = { name: norm($('#p-name').value), phone: norm($('#p-phone').value) };
+      const combos = parseInt($('#p-combos').value||'0',10) || 0;
+      const indiv = parseInt($('#p-indiv').value||'0',10) || 0;
+      addOrUpdateParticipant(evt, buyer, combos, indiv);
+      $('#p-name').value=''; $('#p-phone').value=''; $('#p-combos').value='0'; $('#p-indiv').value='0';
+    });
+  }
+
+  window.__BF_ADD_PARTICIPANT = (evt, buyer, combosDelta=0, indivDelta=0) => { addOrUpdateParticipant(evt, buyer, combosDelta, indivDelta); };
+
+  // Bridge fuerte para individuales -> participantes
+  (function(){
+    const orig = window.__BF_ADD_INDIVIDUALES;
+    window.__BF_ADD_INDIVIDUALES = function(evt, delta){
+      try{
+        const buyer = __bf_readBuyer();
+        if((buyer.name || buyer.phone) && window.__BF_ADD_PARTICIPANT){
+          window.__BF_ADD_PARTICIPANT(evt, buyer, 0, (delta|0));
+        }
+      }catch(_){}
+      if(typeof orig === 'function'){ try{ orig(evt, delta); }catch(_){ } }
+    };
+  })();
+
+  document.addEventListener('DOMContentLoaded', ()=>{
+    wireForm(); renderList(); renderTop();
+    const ev = document.querySelector('#eventId'); if(ev) ev.addEventListener('input', ()=>{ renderList(); renderTop(); });
+    document.getElementById('p-search')?.addEventListener('input', ()=>renderList());
+    document.getElementById('p-status')?.addEventListener('change', ()=>renderList());
+    document.getElementById('p-clear')?.addEventListener('click', ()=>{ const s=$('#p-search'); const st=$('#p-status'); if(s) s.value=''; if(st) st.value=''; renderList(); });
+    document.getElementById('top-mode')?.addEventListener('change', renderTop);
+    document.getElementById('top-n')?.addEventListener('input', renderTop);
+    document.getElementById('top-refresh')?.addEventListener('click', renderTop);
+    document.getElementById('export-pdf-btn')?.addEventListener('click', exportParticipantsPDF);
+  });
+})();

@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bingo Flash Tradicional</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="figuras-bingo.css">
+</head>
+<body>
+<div id="splash" class="splash">
+  <img src="assets/logo-center.png" alt="Bingo Flash">
+  <p class="splash-sub">¡Ya casi empezamos!</p>
+  <button id="startBtnSplash">Iniciar juego</button>
+</div>
+
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-logo-text">Bingo Flash Tradicional</span>
+  </div>
+  <div class="toggles">
+    <label class="inline"><input type="checkbox" id="manualMode"> Modo manual</label>
+    <label class="inline"><input type="checkbox" id="repeatAuto"> Repetir bola</label>
+    <label class="inline"><input type="checkbox" id="speak" checked> Hablar número</label>
+    <label class="inline">Velocidad <input type="range" id="speed" min="500" max="3500" value="1800"></label>
+    <span id="speedVal">1.8s</span>
+    <label class="inline">Volumen <input type="range" id="volume" min="0" max="1" step="0.05" value="0.9"></label>
+  </div>
+  <button id="btn-participantes" class="secondary" style="margin-left:.5rem">👥 Participantes</button>
+  <button id="btn-historial" class="secondary" style="margin-left:.5rem">🏅 Historial ganadores</button>
+</header>
+
+<main class="layout">
+  <aside class="left">
+    <div class="panel">
+      <h3>Bola actual</h3>
+      <div class="current">
+        <div class="letter" id="curLetter">—</div>
+        <div class="ball" id="curBall">—</div>
+      </div>
+      <div class="history">
+        <span class="history-label">Últimos números:</span>
+        <div id="historyList" class="history-list"></div>
+      </div>
+
+      <div class="controls">
+        <button id="start" class="primary">▶ Iniciar</button>
+        <button id="pause" class="secondary">⏸ Pausar</button>
+      </div>
+      <div class="controls">
+        <button id="next">Siguiente →</button>
+        <button id="repeat">Repetir 🔁</button>
+      </div>
+      <div class="controls">
+        <label class="inline" style="color:#e5e7eb;font-weight:600;">
+          Voz
+          <select id="voiceSelect">
+            <option value="">Auto</option>
+          </select>
+        </label>
+      </div>
+      <div class="controls">
+        <button id="reset" class="danger">Reiniciar ■</button>
+        <button id="fullscreen" class="secondary">Pantalla completa ⛶</button>
+      </div>
+    </div>
+    <section id="panel-exportar" class="panel" aria-label="Generar cartones Bingo 75">
+      <h3>Generar cartones (Bingo 75)</h3>
+      <div class="controls"><label for="eventId">Evento:</label><input id="eventId" type="text" placeholder="Ej. NocheFiesta2025" style="flex:1"></div>
+      <div class="controls"><label for="comboCount">Combos:</label><input id="comboCount" type="number" min="1" max="999" value="1"></div>
+      <div class="controls"><label><input id="uniqueCheck" type="checkbox" checked> Evitar repetidos en este evento</label></div>
+      <div class="controls"><label for="buyerName">Comprador:</label><input id="buyerName" type="text" placeholder="Nombre completo" style="flex:1"></div>
+      <div class="controls"><label for="buyerPhone">Celular:</label><input id="buyerPhone" type="tel" placeholder="(opcional)"></div>
+      <div class="controls"><label for="buyerVendor">Vendedor:</label><select id="buyerVendor"><option value="">(sin vendedor)</option></select></div>
+      
+      <div class="controls"><button id="genBtn" class="primary">Generar</button><button id="resetEventBtn" class="danger">Reset evento</button></div>
+      <div class="controls"><label for="outputFmt">Formato:</label><select id="outputFmt"><option value="pdf" selected>PDF</option><option value="jpg">JPG</option></select></div>
+      <div class="controls"><button id="saveEventBtn">Guardar evento</button><button id="loadEventBtn">Cargar evento</button><button id="auditIdsBtn" class="secondary">Auditar IDs</button><button id="repairEventBtn" class="secondary">Reparar evento</button></div>
+      <div id="comboCounter" style="opacity:.8">Combos generados: 0</div>
+      <small class="hint">Un “combo” = 6 cartones (2×3). Centro con logo y BINGO multicolor.</small>
+      <canvas id="card-canvas" width="800" height="1000" style="display:none"></canvas>
+    </section>
+
+  </aside>
+
+  <section class="right">
+    <h2>Números cantados</h2>
+    <div class="board-wrap">
+      <div class="board-header">
+        <div class="hchip b">B</div>
+        <div class="hchip i">I</div>
+        <div class="hchip n">N</div>
+        <div class="hchip g">G</div>
+        <div class="hchip o">O</div>
+      </div>
+      <div id="board" class="board"></div>
+    </div>
+  </section>
+</main>
+
+
+<div id="flyOverlay" class="fly-overlay"></div>
+<script type="module" src="app.js"></script>
+  <script type="module" src="assets/exporter/combos.js"></script>
+  <script type="module" src="assets/winner-detector.js"></script>
+  <script src="figuras-bingo.js" defer></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    if (window.initBingoFiguresWidget) {
+      initBingoFiguresWidget({ title: "TUS PREMIOS" });
+      document.addEventListener("bfw:eventChanged", (e) => {
+        window.__EVENTO_BINGO__ = e.detail;
+      });
+    }
+  });
+</script>
+  <script src="cartones-individuales.js" defer></script>
+
+<!-- BF: Fallback robusto para contador de individuales -->
+<script>
+(function(){
+  const LS_KEY = 'bingo_events';
+  function load(){ try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch(e) { return {}; } }
+  function save(db){ localStorage.setItem(LS_KEY, JSON.stringify(db)); }
+  function norm(evt){ evt = (evt || 'default').trim() || 'default'; return evt; }
+  function updateUI(evt){
+    evt = norm(evt);
+    let el = document.getElementById('individualCounter');
+    if (!el) {
+      const cc = document.getElementById('comboCounter');
+      if (cc) {
+        el = document.createElement('div');
+        el.id = 'individualCounter';
+        el.style.opacity = '.8';
+        cc.insertAdjacentElement('afterend', el);
+      }
+    }
+    if (el) {
+      const db = load();
+      const n = (db[evt] && db[evt].individuales_total) | 0;
+      el.textContent = `Individuales: ${n}`;
+    }
+  }
+  function updateAutoProgress(evt){
+    evt = norm(evt);
+    const db = load();
+    const ev = db[evt] || {};
+    const meta = ev.meta || {};
+    const comboSize = (parseInt(meta.comboSize,10) > 0 ? parseInt(meta.comboSize,10) : 6);
+    const combos = (ev.combos_total|0);
+    const indiv = (ev.individuales_total|0);
+    const total = combos * comboSize + indiv;
+    const goal = (meta.autoTargetCards|0);
+    const pct = goal > 0 ? Math.min(100, Math.round(total*100/goal)) : 0;
+
+    const input = document.getElementById('ev-auto-target');
+    const summary = document.getElementById('ev-auto-progress-summary');
+    const bar = document.getElementById('ev-auto-progress-bar');
+
+    if(input && !input.value && goal){ input.value = goal; }
+    if(summary){
+      if(goal > 0){
+        summary.textContent = `${total} / ${goal} cartones (${pct}%)`;
+      }else{
+        summary.textContent = `${total} cartones generados`;
+      }
+    }
+    if(bar){
+      bar.style.width = (goal > 0 ? pct : 0) + '%';
+    }
+  }
+  window.__BF_UPDATE_AUTO_PROGRESS = function(evt){
+    const cur = evt || document.getElementById('eventId')?.value;
+    updateAutoProgress(cur);
+  };
+  window.__BF_REFRESH_AUTO_BAR = updateAutoProgress;
+
+  window.__BF_ADD_INDIVIDUALES = function(evt, add){
+    evt = norm(evt);
+    add = (add|0);
+    const db = load();
+    db[evt] = db[evt] || { cards:{}, seq:0, buyers:{}, combos_total:(db[evt]?.combos_total|0) };
+    db[evt].individuales_total = ((db[evt].individuales_total|0) + add);
+    save(db);
+    updateUI(evt);
+    if(window.__BF_UPDATE_AUTO_PROGRESS){ window.__BF_UPDATE_AUTO_PROGRESS(evt); }
+  };
+  document.addEventListener('DOMContentLoaded', function(){
+    updateUI(document.getElementById('eventId')?.value);
+  });
+  document.getElementById('eventId')?.addEventListener('input', function(){
+    updateUI(this.value);
+  });
+  document.getElementById('resetEventBtn')?.addEventListener('click', function(){
+    const evt = norm(document.getElementById('eventId')?.value);
+    const db = load(); db[evt] = db[evt] || {}; db[evt].individuales_total = 0; save(db);
+    updateUI(evt);
+  });
+})();
+</script>
+
+  <script src="event-admin.js" defer></script>
+
+<!-- Overlay de Vendedores -->
+<div id="vendors-backdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1200"></div>
+<div id="vendors-overlay" style="display:none;position:fixed;inset:0;align-items:center;justify-content:center;z-index:1201">
+  <div style="background:#020617;color:#e5e7eb;max-width:1040px;width:100%;margin:16px;border-radius:16px;box-shadow:0 18px 50px rgba(0,0,0,.6);overflow:auto;max-height:90vh">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.08)">
+      <h3 style="margin:0">Vendedores</h3>
+      <button id="vendors-close" class="secondary">Cerrar ✖</button>
+    </div>
+
+    <div style="padding:12px 16px">
+      <div class="controls" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.5rem">
+        <input id="v-search" type="search" placeholder="Buscar por nombre o celular" style="flex:1;min-width:220px">
+      </div>
+
+      <form id="vendors-form" class="controls" style="display:grid;grid-template-columns:repeat(4, minmax(0,1fr));gap:.5rem;align-items:end;margin-bottom:.75rem">
+        <div>
+          <label for="v-name">Nombre</label>
+          <input id="v-name" type="text" placeholder="Nombre del vendedor">
+        </div>
+        <div>
+          <label for="v-phone">Celular</label>
+          <input id="v-phone" type="tel" placeholder="(opcional)">
+        </div>
+        <div>
+          <label for="v-commission">Comisión %</label>
+          <input id="v-commission" type="number" min="0" max="100" step="0.1" value="10">
+        </div>
+        <div>
+          <button class="primary" type="submit" style="margin-top:1.45rem">Agregar/Actualizar</button>
+        </div>
+      </form>
+
+      <div style="overflow:auto;margin-top:.5rem">
+        <table class="table" style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr>
+              <th style="text-align:left">Nombre</th>
+              <th style="text-align:left">Celular</th>
+              <th style="text-align:right">Comisión %</th>
+              <th style="text-align:left">Link de ventas</th>
+              <th style="text-align:right">Cartones físicos</th>
+              <th style="text-align:right">Cartones online</th>
+              <th style="text-align:right">Cartones totales</th>
+              <th style="text-align:right">Comisión física (COP)</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="vendors-tbody"></tbody>
+        </table>
+      </div>
+
+      <small class="hint">Los totales se calculan sumando los participantes vinculados al vendedor y las ventas en línea registradas con su link.</small>
+    </div>
+  </div>
+</div>
+
+<!-- Overlay de Participantes -->
+<div id="participants-backdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1200"></div>
+<div id="participants-overlay" style="display:none;position:fixed;top:8%;left:10%;right:10%;bottom:8%;background:#0b1220;color:#e5e7eb;border:1px solid rgba(255,255,255,.08);border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.6);z-index:1201;overflow:auto">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.08)">
+    <h3 style="margin:0">Participantes</h3>
+    <div><button id="participants-close" class="secondary">Cerrar ✖</button></div>
+  </div>
+  <div style="padding:12px 16px">
+    <div id="participants-filters" class="controls" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.5rem">
+      <input id="p-search" type="search" placeholder="Buscar por nombre o celular" style="flex:1;min-width:220px">
+      <label style="display:flex;align-items:center;gap:.35rem">Estado:
+        <select id="p-status">
+          <option value="">Todos</option>
+          <option value="pendiente">Pendiente</option>
+          <option value="reservado">Reservado</option>
+          <option value="pago">Pago</option>
+        </select>
+      </label>
+      <button id="p-clear" class="secondary">Limpiar</button>
+      <button id="export-pdf-btn" class="primary">📄 Exportar PDF</button>
+    </div>
+
+    <form id="participants-form" class="controls" style="display:grid;grid-template-columns:repeat(6, minmax(0,1fr));gap:.5rem;align-items:end">
+      <div style="grid-column:span 2">
+        <label for="p-name">Nombre</label>
+        <input id="p-name" type="text" placeholder="Nombre y apellido">
+      </div>
+      <div>
+        <label for="p-phone">Celular</label>
+        <input id="p-phone" type="tel" placeholder="(opcional)">
+      </div>
+      <div>
+        <label for="p-vendor">Vendedor</label>
+        <select id="p-vendor">
+          <option value="">(sin vendedor)</option>
+        </select>
+      </div>
+      <div>
+        <label for="p-combos">Combos</label>
+        <input id="p-combos" type="number" min="0" value="0">
+      </div>
+      <div>
+        <label for="p-indiv">Individuales</label>
+        <input id="p-indiv" type="number" min="0" value="0">
+      </div>
+      <div>
+        <button class="primary" type="submit">Agregar/Actualizar</button>
+      </div>
+    </form>
+
+    <div id="top-box" class="card" style="margin-top:.5rem;padding:.75rem;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:#0f172a">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap">
+        <button id="top-toggle" class="secondary" style="padding:.35rem .6rem">🏆 Top de compradores</button>
+        <div style="display:flex;gap:.5rem;align-items:center">
+          <label style="display:flex;align-items:center;gap:.35rem">Ordenar por:
+            <select id="top-mode">
+              <option value="total">Total cartones</option>
+              <option value="combos">Combos</option>
+              <option value="individuales">Individuales</option>
+            </select>
+          </label>
+          <label style="display:flex;align-items:center;gap:.35rem">Top:
+            <input id="top-n" type="number" min="3" max="100" value="10" style="width:72px">
+          </label>
+          <button id="top-refresh" class="secondary">Actualizar</button>
+        </div>
+      </div>
+      <div id="top-body" style="display:none;overflow:auto;margin-top:.5rem">
+        <table class="table" style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr>
+              <th style="text-align:left">#</th>
+              <th style="text-align:left">Nombre</th>
+              <th style="text-align:left">Celular</th>
+              <th>Combos</th>
+              <th>Individuales</th>
+              <th>Total cartones</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody id="top-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div style="overflow:auto;margin-top:.5rem">
+      <table class="table" style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr>
+            <th style="text-align:left">Nombre</th>
+            <th style="text-align:left">Celular</th>
+            <th style="text-align:left">Vendedor</th>
+            <th>Combos</th>
+            <th>Individuales</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="participants-tbody"></tbody>
+      </table>
+    </div>
+    <small class="hint">Los números se acumulan por evento. Cambia el estado con “Reservado” o “Pago”.</small>
+  </div>
+</div>
+<script>
+(function(){
+  function $(s){ return document.querySelector(s); }
+  function open(){ $('#participants-backdrop').style.display='block'; $('#participants-overlay').style.display='block'; }
+  function close(){ $('#participants-backdrop').style.display='none'; $('#participants-overlay').style.display='none'; }
+  document.addEventListener('DOMContentLoaded', function(){
+    document.getElementById('btn-participantes')?.addEventListener('click', open);
+    document.getElementById('participants-close')?.addEventListener('click', close);
+    document.getElementById('participants-backdrop')?.addEventListener('click', close);
+  });
+})();
+</script>
+<script>
+// top plegable
+document.addEventListener('DOMContentLoaded', function(){
+  var btn = document.getElementById('top-toggle');
+  var body = document.getElementById('top-body');
+  if(btn && body){
+    btn.addEventListener('click', function(){
+      body.style.display = (body.style.display==='none'||!body.style.display) ? 'block' : 'none';
+    });
+  }
+});
+</script>
+
+  <script src="vendors.js" defer></script>
+  <script src="participants.js" defer></script>
+
+<!-- Manual Capacity Widget -->
+<div class="cap-widget" id="cap-widget" style="display:none">
+  <h4>
+    Cartones disponibles para este evento
+    
+  </h4>
+  <div class="cap-bar"><span id="cap-bar-fill" style="width:0%"></span></div>
+  <div class="cap-meta">
+    <span id="cap-meta-left">0 / 0</span>
+    <span id="cap-meta-right">0%</span>
+  </div>
+</div>
+
+<!-- Overlay de Capacidad / Progreso manual -->
+<div id="cap-backdrop"></div>
+<div id="cap-panel">
+  <div class="card">
+    <header>
+      <h3>Configurar cartones visibles y progreso</h3>
+      <button id="cap-close" class="button-tiny" style="background:#ef4444">Cerrar ✕</button>
+    </header>
+    <div class="body">
+
+    <div class="row">
+      <label for="cap-visible">Cartones visibles (límite de la barra)</label>
+      <input id="cap-visible" type="number" min="0" step="1" value="0">
+      <small>La barra calcula el % = vendidos / visibles (vendidos / totales).</small>
+    </div>
+
+
+        <div class="row">
+          <label for="cap-sold">Cartones vendidos (manual)</label>
+          <input id="cap-sold" type="number" min="0" step="1" value="0">
+        </div>
+
+        </div>
+        <footer>
+        
+      <button id="cap-reset" class="button-tiny" style="background:#6b7280">Reiniciar</button>
+      <button id="cap-save" class="button-tiny">Guardar</button>
+    </footer>
+  </div>
+</div>
+
+
+<script>
+// === Manual Capacity / Progress per event ===
+(function(){
+  const LS_KEY = 'bingo_events';
+  const $ = (s,c=document)=>c.querySelector(s);
+  function load(){ try { return JSON.parse(localStorage.getItem(LS_KEY)||'{}'); } catch(e) { return {}; } }
+  function save(db){ localStorage.setItem(LS_KEY, JSON.stringify(db)); }
+  function curEvent(){ return (document.querySelector('#eventId')?.value||'').trim() || 'default'; }
+
+  function getMeta(db, evt){
+    db[evt] = db[evt] || {}; db[evt].meta = db[evt].meta || {};
+    db[evt].meta.capacity = db[evt].meta.capacity || { visible: 0, progress: 0 };
+    return db[evt].meta.capacity;
+  }
+
+  function applyUI(){
+    const evt = curEvent();
+    const db = load(); const c = (db?.[evt]?.meta?.capacity) || { visible:0, progress:0 };
+    const widget = $('#cap-widget');
+    if(!widget) return;
+    widget.style.display = 'block';
+    const fill = $('#cap-bar-fill'), left = $('#cap-meta-left'), right = $('#cap-meta-right');
+    const visible = Math.max(0, parseInt(c.visible||0,10)||0);
+    const prog = Math.max(0, Math.min(100, parseInt(c.progress||0,10)||0));
+    fill.style.width = prog + '%';
+    left.textContent = `0 / ${visible}`; // mostramos el máximo configurado; vendido real puede pasar de este número
+    right.textContent = prog + '%';
+  }
+
+  function openPanel(){
+    const evt = curEvent();
+    const db = load(); const c = (db?.[evt]?.meta?.capacity) || { visible:0, progress:0 };
+    $('#cap-backdrop').style.display = 'block';
+    $('#cap-panel').style.display = 'flex';
+    $('#cap-visible').value = String(c.visible||0);
+    $('#cap-progress').value = String(c.progress||0);
+    $('#cap-progress-number').value = String(c.progress||0);
+  }
+  function closePanel(){
+    $('#cap-backdrop').style.display = 'none';
+    $('#cap-panel').style.display = 'none';
+  }
+  function savePanel(){
+    const evt = curEvent();
+    const db = load(); db[evt] = db[evt] || {}; db[evt].meta = db[evt].meta || {};
+    const visible = Math.max(0, parseInt($('#cap-visible').value||'0', 10)||0);
+    const progress = Math.max(0, Math.min(100, parseInt($('#cap-progress').value||'0',10)||0));
+    db[evt].meta.capacity = { visible, progress };
+    save(db);
+    applyUI();
+    closePanel();
+  }
+
+  // Sync slider <-> number
+  document.addEventListener('input', (e)=>{
+    if(e.target?.id==='cap-progress'){ $('#cap-progress-number').value = e.target.value; }
+    if(e.target?.id==='cap-progress-number'){ 
+      let v = Math.max(0, Math.min(100, parseInt(e.target.value||'0',10)||0));
+      $('#cap-progress').value = v; e.target.value = v;
+    }
+  });
+
+  // Button events
+  document.addEventListener('click', (e)=>{
+    if(e.target?.id==='cap-open'){ openPanel(); }
+    if(e.target?.id==='cap-close' || e.target?.id==='cap-backdrop'){ closePanel(); }
+    if(e.target?.id==='cap-save'){ savePanel(); }
+    if(e.target?.id==='cap-reset'){ $('#cap-visible').value='0'; $('#cap-progress').value='0'; $('#cap-progress-number').value='0'; }
+  });
+
+  // When event changes elsewhere, update widget
+  const eventIdInput = document.querySelector('#eventId');
+  if(eventIdInput){
+    eventIdInput.addEventListener('change', applyUI);
+  }
+  // Try also initial apply after load & short delay for any dynamic UI
+  window.addEventListener('load', ()=>setTimeout(applyUI, 300));
+  // Expose for other modules if needed
+  window.__BF_applyCapacityUI = applyUI;
+})();
+</script>
+
+
+<script>
+(function(){
+  const LS_KEY = 'bingo_events';
+  const $ = (s,c=document)=>c.querySelector(s);
+  function load(){ try { return JSON.parse(localStorage.getItem(LS_KEY)||'{}'); } catch(e){ return {}; } }
+  function save(db){ localStorage.setItem(LS_KEY, JSON.stringify(db)); }
+  function curEvent(){ return (document.querySelector('#eventId')?.value||'').trim() || 'default'; }
+  function pctFmt(x){ return (x||0).toLocaleString('es-CO',{minimumFractionDigits:2,maximumFractionDigits:2})+'%'; }
+
+  function readCap(evt){
+    const db = load(); const base = db?.[evt] || {}; const meta = base.meta || {};
+    return (meta.capacity || {visible:0, sold:0});
+  }
+  function writeCap(evt, cap){
+    const db = load(); db[evt] = db[evt] || {}; db[evt].meta = db[evt].meta || {};
+    db[evt].meta.capacity = cap; localStorage.setItem(LS_KEY, JSON.stringify(db));
+  }
+
+  function applyCapUI(){
+    const evt = curEvent();
+    const cap = readCap(evt);
+    const widget = document.getElementById('cap-widget'); if(!widget) return;
+    widget.style.display = 'block';
+    const visible = Math.max(0, parseInt(cap.visible||0,10)||0);
+    const sold = Math.max(0, parseInt(cap.sold||0,10)||0);
+    const pct = visible>0 ? (sold/visible)*100 : 0;
+    const fill = document.getElementById('cap-bar-fill');
+    if(fill) fill.style.width = Math.min(pct, 100) + '%';
+    const left = document.getElementById('cap-meta-left');
+    const right = document.getElementById('cap-meta-right');
+    if(left) left.textContent = `${sold.toLocaleString('es-CO')} / ${visible.toLocaleString('es-CO')}`;
+    if(right) right.textContent = pctFmt(pct);
+  }
+
+  function openCap(){
+    const evt = curEvent(); const cap = readCap(evt);
+    const b = document.getElementById('cap-backdrop'); const p = document.getElementById('cap-panel');
+    if(b) b.style.display='block'; if(p) p.style.display='flex';
+    const v = document.getElementById('cap-visible'); const s = document.getElementById('cap-sold');
+    if(v) v.value = String(cap.visible||0);
+    if(s) s.value = String(cap.sold||0);
+  }
+  function closeCap(){
+    const b = document.getElementById('cap-backdrop'); const p = document.getElementById('cap-panel');
+    if(b) b.style.display='none'; if(p) p.style.display='none';
+  }
+  function saveCap(){
+    const evt = curEvent();
+    const visible = Math.max(0, parseInt(document.getElementById('cap-visible')?.value||'0',10)||0);
+    const sold = Math.max(0, parseInt(document.getElementById('cap-sold')?.value||'0',10)||0);
+    writeCap(evt, { visible, sold });
+    applyCapUI(); closeCap();
+  }
+
+  // Abrir configuración al hacer clic en el widget (barra/título/números)
+  document.addEventListener('click', (e)=>{
+    if(e.target.closest && e.target.closest('#cap-widget')) openCap();
+    if(e.target.id==='cap-close' || e.target.id==='cap-backdrop') closeCap();
+    if(e.target.id==='cap-save') saveCap();
+    if(e.target.id==='cap-reset'){ const v=document.getElementById('cap-visible'); const s=document.getElementById('cap-sold'); if(v) v.value='0'; if(s) s.value='0'; }
+  });
+
+  // Si el evento cambia, actualizar la barra
+  const eventIdInput = document.querySelector('#eventId');
+  if(eventIdInput){ eventIdInput.addEventListener('change', applyCapUI); }
+
+  window.addEventListener('load', ()=> setTimeout(applyCapUI, 200));
+  window.__BF_applyCapUI = applyCapUI;
+})();
+</script>
+
+
+
+
+
+
+<div id="bf-history-modal" class="bf-modal" style="display:none">
+  <div class="bf-card bf-history-card">
+    <h3>Historial de ganadores</h3>
+    <div id="bf-history-list" class="bf-history-list"></div>
+    <button id="bf-history-close" class="primary" style="margin-top:0.75rem">Cerrar</button>
+  </div>
+</div>
+
+
+<script>
+(function(){
+  function loadEventsDB(){
+    try{
+      return JSON.parse(localStorage.getItem('bingo_events')||'{}');
+    }catch(_){
+      return {};
+    }
+  }
+  function getCurrentEventId(){
+    const el = document.querySelector('#eventId');
+    const v = (el && el.value || '').trim();
+    return v || 'default';
+  }
+  function renderHistory(){
+    const list = document.getElementById('bf-history-list');
+    if(!list) return;
+    const db = loadEventsDB();
+    const evt = getCurrentEventId();
+    const ev = db[evt] || {};
+    const hist = Array.isArray(ev.winHistory) ? ev.winHistory.slice() : [];
+    hist.sort((a,b)=> (a.at||0) - (b.at||0));
+    list.innerHTML = '';
+    if(hist.length === 0){
+      const empty = document.createElement('div');
+      empty.textContent = 'Aún no hay ganadores registrados para este evento.';
+      empty.style.opacity = '0.7';
+      list.appendChild(empty);
+      return;
+    }
+    hist.forEach((entry, idx)=>{
+      const row = document.createElement('div');
+      row.className = 'bf-history-item';
+      const tipo = entry.tipo === 'full' ? 'Cartón lleno' : 'Figura';
+      const label = entry.figName || entry.figId || '?';
+      const winners = Array.isArray(entry.winners) ? entry.winners : [];
+      const parts = winners.map(w=>{
+        const b = w.buyer || {};
+        const name = b.name || b.nombre || b.alias || 'Sin nombre';
+        const cid = w.id || '';
+        return name + (cid ? ' ('+cid+')' : '');
+      });
+      const title = document.createElement('div');
+      const strong = document.createElement('strong');
+      strong.textContent = (idx+1) + '. ' + label;
+      const small = document.createElement('small');
+      small.textContent = ' — ' + tipo;
+      title.appendChild(strong);
+      title.appendChild(small);
+      row.appendChild(title);
+      if(parts.length){
+        const body = document.createElement('div');
+        body.textContent = parts.join(', ');
+        row.appendChild(body);
+      }
+      list.appendChild(row);
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    const btn = document.getElementById('btn-historial');
+    const modal = document.getElementById('bf-history-modal');
+    const closeBtn = document.getElementById('bf-history-close');
+    if(btn && modal){
+      btn.addEventListener('click', function(){
+        renderHistory();
+        modal.style.display = 'flex';
+        modal.style.pointerEvents = 'none';
+        const card = modal.querySelector('.bf-card');
+        if(card){
+          card.style.pointerEvents = 'auto';
+          if(window.makeDraggable){
+            try{ window.makeDraggable(card, modal); }catch(_){}
+          }
+        }
+      });
+    }
+    if(closeBtn && modal){
+      closeBtn.addEventListener('click', function(){
+        modal.style.display = 'none';
+      });
+    }
+  });
+})();
+</script>
+
+  
+  <!-- Firebase & sincronización en la nube -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script>
+    window.BF_FIREBASE_CONFIG = {
+      apiKey: "AIzaSyA05aO6wOiOCGaW626-QhthPLnBifZKdfY",
+      authDomain: "bingo-flash-tradicional.firebaseapp.com",
+      projectId: "bingo-flash-tradicional",
+      storageBucket: "bingo-flash-tradicional.firebasestorage.app",
+      messagingSenderId: "238426438816",
+      appId: "1:238426438816:web:3ad130267e065b86e99dc5"
+    };
+  </script>
+  <script src="cloud-sync.js"></script>
+  <script src="auth-ui.js"></script>
+
+</body>
+</html>
