@@ -216,9 +216,11 @@
         overlay.style.display = 'none';
         // Mostrar mini chip de usuario / botón de salir
         ensureUserChip(user);
-        if (window.BF_SYNC_NOW_FROM_CLOUD){
-          window.BF_SYNC_NOW_FROM_CLOUD();
-        }
+        if (window.BF_SYNC_BOOTSTRAP) {
+  await window.BF_SYNC_BOOTSTRAP();
+} else if (window.BF_SYNC_NOW_FROM_CLOUD) {
+  await window.BF_SYNC_NOW_FROM_CLOUD();
+}
       }else{
         overlay.style.display = 'flex';
         if (window.__bfUserChip){
