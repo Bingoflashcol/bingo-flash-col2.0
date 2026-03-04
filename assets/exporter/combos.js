@@ -391,10 +391,27 @@ function auditEvent(evt){
     const ids = Object.keys(ev.ids || {});
     const gen = Array.isArray(ev.generated) ? ev.generated : [];
     const totalIds = ids.length;
-    const totalGen = gen.length;
     const dupIds = totalIds - new Set(ids).size;
-    const uniqGrids = new Set(gen.map(c => JSON.stringify(c.cols))).size;
-    alert('Auditoría de "'+evt+'":\n• IDs en tabla: '+totalIds+'\n• IDs duplicados: '+dupIds+'\n• Cartones generados: '+totalGen+'\n• Grillas únicas: '+uniqGrids);
+
+    // "generated" guarda solo los cartones con detalle (normalmente combos/exportación).
+    // Los cartones individuales se cuentan en ev.individuales_total.
+    const indivTotal = (ev.individuales_total|0);
+    const combosTotal = (ev.combos_total|0);
+    const totalDetailed = gen.length;
+
+    // Grillas únicas: preferimos ev.cards (id -> cols) porque incluye TODO.
+    const cardsObj = (ev.cards && typeof ev.cards === 'object') ? ev.cards : {};
+    const uniqGrids = new Set(Object.values(cardsObj).map(c => JSON.stringify(c))).size;
+
+    alert(
+      'Auditoría de "'+evt+'":\n'
+      + '• IDs en tabla: ' + totalIds + '\n'
+      + '• IDs duplicados: ' + dupIds + '\n'
+      + '• Cartones detallados: ' + totalDetailed + '\n'
+      + '• Individuales (contador): ' + indivTotal + '\n'
+      + '• Combos (contador): ' + combosTotal + '\n'
+      + '• Grillas únicas: ' + uniqGrids
+    );
   }catch(e){ console.error(e); alert('No se pudo auditar el evento.'); }
 }
 // === Reparación de evento (estructura y datos) ===
