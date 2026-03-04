@@ -211,7 +211,7 @@
     });
 
     // Actualizar UI cuando cambie el usuario
-    window.BF_AUTH.onAuthStateChanged(function(user){
+    window.BF_AUTH.onAuthStateChanged(async function(user){
       if (user){
         overlay.style.display = 'none';
         // Mostrar mini chip de usuario / botón de salir
