@@ -65,19 +65,7 @@ const genBtn=$('#genBtn'), resetEventBtn=$('#resetEventBtn');
 const outputFmt=$('#outputFmt'), saveEventBtn=$('#saveEventBtn'), loadEventBtn=$('#loadEventBtn');
 const comboCounter=$('#comboCounter');
 function loadDB(){ try{return JSON.parse(localStorage.getItem('bingo_events')||'{}');}catch{ return {}; } }
-function saveDB(db){
-  // Guardar siempre en local
-  try{
-    localStorage.setItem('bingo_events', JSON.stringify(db));
-  }catch(e){
-    console.warn('[Bingo] No se pudo guardar en localStorage', e);
-  }
-  // Forzar sync a Firestore si está disponible (en algunos móviles el hook
-  // de localStorage no se dispara de forma confiable).
-  try{
-    if (window.BF_SYNC_NOW_TO_CLOUD) window.BF_SYNC_NOW_TO_CLOUD();
-  }catch(_e){}
-}
+function saveDB(db){ localStorage.setItem('bingo_events', JSON.stringify(db)); }
 function isSalesLocked(evt){
   try{
     const db = loadDB();
@@ -388,32 +376,61 @@ function auditEvent(evt){
   try{
     const db = loadDB(); const ev = db?.[evt];
     if(!ev){ alert('No existe el evento "'+evt+'".'); return; }
-    const ids = Object.keys(ev.ids || {});
+
+    const idsKeys = Object.keys(ev.ids || {});
+    const cardsKeys = Object.keys(ev.cards || {});
     const gen = Array.isArray(ev.generated) ? ev.generated : [];
-    const totalIds = ids.length;
-    const dupIds = totalIds - new Set(ids).size;
 
-    // "generated" guarda solo los cartones con detalle (normalmente combos/exportación).
-    // Los cartones individuales se cuentan en ev.individuales_total.
-    const indivTotal = (ev.individuales_total|0);
-    const combosTotal = (ev.combos_total|0);
-    const totalDetailed = gen.length;
+    const totalIds = idsKeys.length;
+    const dupIds = totalIds - new Set(idsKeys).size;
 
-    // Grillas únicas: preferimos ev.cards (id -> cols) porque incluye TODO.
-    const cardsObj = (ev.cards && typeof ev.cards === 'object') ? ev.cards : {};
-    const uniqGrids = new Set(Object.values(cardsObj).map(c => JSON.stringify(c))).size;
+    // Conteos "reales" (detalle) a partir de cards/ids
+    const totalCards = cardsKeys.length;
+
+    // Conteos declarados por el evento (si existen)
+    const comboSize = Number(ev?.meta?.comboSize || 6);
+    const combosCont = Number(ev.combos_total || 0);
+    const indCont = Number(ev.individuales_total || 0);
+    const expectedByCounters = (combosCont * comboSize) + indCont;
+
+    // Grillas únicas (desde cards si existen; si no, desde generated)
+    const gridSrc = totalCards ? cardsKeys.map(k => ev.cards[k]).filter(Boolean) : gen;
+    const uniqGrids = new Set(gridSrc.map(c => {
+      try{ return JSON.stringify(c.cols || c.grid || c); }catch(_){ return String(Math.random()); }
+    })).size;
+
+    // "Generados" puede ser 1 por combo en algunos flujos, así que lo mostramos aparte
+    const genCount = gen.length;
 
     alert(
-      'Auditoría de "'+evt+'":\n'
-      + '• IDs en tabla: ' + totalIds + '\n'
-      + '• IDs duplicados: ' + dupIds + '\n'
-      + '• Cartones detallados: ' + totalDetailed + '\n'
-      + '• Individuales (contador): ' + indivTotal + '\n'
-      + '• Combos (contador): ' + combosTotal + '\n'
-      + '• Grillas únicas: ' + uniqGrids
+      'Auditoría de "'+evt+'":' +
+      '
+• IDs en tabla: ' + totalIds +
+      '
+• IDs duplicados: ' + dupIds +
+      '
+• Cartones detallados: ' + totalCards +
+      '
+• Individuales (contador): ' + indCont +
+      '
+• Combos (contador): ' + combosCont +
+      '
+• Esperados por contadores: ' + expectedByCounters +
+      '
+• Grillas únicas: ' + uniqGrids +
+      (totalCards && totalIds && totalCards !== totalIds ? ('
+
+⚠️ Ojo: cards('+totalCards+') != ids('+totalIds+').') : '') +
+      (!totalCards && genCount ? ('
+
+Nota: No hay cards detallados; usando "generated" para estimar grillas.') : '')
     );
-  }catch(e){ console.error(e); alert('No se pudo auditar el evento.'); }
+  }catch(e){
+    console.error(e);
+    alert('No se pudo auditar el evento.');
+  }
 }
+
 // === Reparación de evento (estructura y datos) ===
 function repairEvent(evt){
   try{
