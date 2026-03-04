@@ -1,195 +1,186 @@
-// cloud-sync.js
+
+// BF Cloud Sync + Usuarios (Auth + Firestore por usuario) - sin UI (lo maneja auth-ui.js)
 (function(){
-  const CFG = window.BF_FIREBASE_CONFIG;
-  if(!CFG || !window.firebase){
-    console.warn("[BF Cloud] Firebase no está cargado o falta config.");
+  if (!window.BF_FIREBASE_CONFIG){
+    console.warn('[BF Cloud] No hay configuración de Firebase.');
     return;
   }
 
-  // Init Firebase (compat)
-  if(!firebase.apps.length){
-    firebase.initializeApp(CFG);
+  if (!window.firebase){
+    console.error('[BF Cloud] SDK de Firebase no encontrado (firebase-* scripts).');
+    return;
   }
 
-  const db = firebase.firestore();
-  const auth = firebase.auth();
+  var app;
+  if (firebase.apps && firebase.apps.length){
+    app = firebase.apps[0];
+  }else{
+    app = firebase.initializeApp(window.BF_FIREBASE_CONFIG);
+  }
+  var auth = app.auth();
+  var db   = app.firestore();
 
-  const STORAGE_KEY = "bingo_events";
-  let pendingLocalChanges = false; // <- cambios hechos antes de que auth esté listo
-  let bootstrapping = false;
+  window.BF_AUTH = auth;
+  window.BF_DB   = db;
 
-  function safeParse(json, fallback){
-    try{ return JSON.parse(json); }catch(_){ return fallback; }
+  var syncingFromCloud = false;
+  var lastUserId = null;
+
+  function getUserDocRef(){
+    var u = auth.currentUser;
+    if (!u) return null;
+    return db.collection('users').doc(u.uid);
   }
 
-  function readLocal(){
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return safeParse(raw, {});
-  }
-
-  function writeLocal(obj){
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
-  }
-
-  // Merge “profundo” pero simple para tu estructura actual
-  function mergeEvents(remote, local){
-    const out = JSON.parse(JSON.stringify(remote || {}));
-
-    for(const eventId of Object.keys(local || {})){
-      if(!out[eventId]) out[eventId] = {};
-
-      const rE = out[eventId] || {};
-      const lE = local[eventId] || {};
-
-      // meta
-      out[eventId].meta = Object.assign({}, rE.meta || {}, lE.meta || {});
-
-      // ids (map id->1)
-      out[eventId].ids = Object.assign({}, rE.ids || {}, lE.ids || {});
-
-      // cards (map id->cardObj)
-      out[eventId].cards = Object.assign({}, rE.cards || {}, lE.cards || {});
-
-      // generated (array)
-      const rGen = Array.isArray(rE.generated) ? rE.generated : [];
-      const lGen = Array.isArray(lE.generated) ? lE.generated : [];
-      const seen = new Set();
-      const mergedGen = [];
-      for(const c of rGen){ if(c && c.id && !seen.has(c.id)){ seen.add(c.id); mergedGen.push(c); } }
-      for(const c of lGen){ if(c && c.id && !seen.has(c.id)){ seen.add(c.id); mergedGen.push(c); } }
-      out[eventId].generated = mergedGen;
-
-      // buyers/vendors/won etc.
-      out[eventId].buyers  = Object.assign({}, rE.buyers  || {}, lE.buyers  || {});
-      out[eventId].vendors = Object.assign({}, rE.vendors || {}, lE.vendors || {});
-      out[eventId].won     = Object.assign({}, rE.won     || {}, lE.won     || {});
-
-      // counters (preferimos el MAYOR, para no “perder” conteos)
-      const rSeq = Number(rE.seq || 0);
-      const lSeq = Number(lE.seq || 0);
-      out[eventId].seq = Math.max(rSeq, lSeq);
-
-      const rCT = Number(rE.combos_total || 0);
-      const lCT = Number(lE.combos_total || 0);
-      out[eventId].combos_total = Math.max(rCT, lCT);
-
-      const rIT = Number(rE.individuales_total || 0);
-      const lIT = Number(lE.individuales_total || 0);
-      out[eventId].individuales_total = Math.max(rIT, lIT);
+  function loadLocalDB(){
+    try{
+      var raw = window.localStorage.getItem('bingo_events') || '{}';
+      var obj = JSON.parse(raw);
+      return obj && typeof obj === 'object' ? obj : {};
+    }catch(_){
+      return {};
     }
+  }
+
+  function saveLocalDB(dbObj){
+    try{
+      syncingFromCloud = true;
+      window.localStorage.setItem('bingo_events', JSON.stringify(dbObj || {}));
+    }finally{
+      syncingFromCloud = false;
+    }
+  }
+
+  
+  function mergeEventObjects(base, incoming){
+    base = base && typeof base === 'object' ? base : {};
+    incoming = incoming && typeof incoming === 'object' ? incoming : {};
+    var out = Object.assign({}, base);
+
+    function mergeMapField(field){
+      var a = (base[field] && typeof base[field] === 'object') ? base[field] : {};
+      var b = (incoming[field] && typeof incoming[field] === 'object') ? incoming[field] : {};
+      out[field] = Object.assign({}, a, b); // union; incoming wins on key collision
+    }
+
+    // maps
+    mergeMapField('cards');
+    mergeMapField('ids');
+    mergeMapField('won');
+    mergeMapField('buyers');
+    mergeMapField('vendors');
+    mergeMapField('meta');
+
+    // arrays
+    var aGen = Array.isArray(base.generated) ? base.generated : [];
+    var bGen = Array.isArray(incoming.generated) ? incoming.generated : [];
+    var seen = {};
+    var mergedGen = [];
+    for (var i=0;i<aGen.length;i++){ var v=aGen[i]; if (!seen[v]){ seen[v]=1; mergedGen.push(v);} }
+    for (var j=0;j<bGen.length;j++){ var v2=bGen[j]; if (!seen[v2]){ seen[v2]=1; mergedGen.push(v2);} }
+    out.generated = mergedGen;
+
+    // counters / seq: keep max
+    out.seq = Math.max(Number(base.seq||0), Number(incoming.seq||0));
+    out.combos_total = Math.max(Number(base.combos_total||0), Number(incoming.combos_total||0));
+    out.individuales_total = Math.max(Number(base.individuales_total||0), Number(incoming.individuales_total||0));
 
     return out;
   }
 
-  function userDocRef(uid){
-    return db.collection("users").doc(uid);
-  }
-
-  async function syncLocalToCloud(){
-    const user = auth.currentUser;
-    if(!user){
-      pendingLocalChanges = true;
-      return;
-    }
-
-    const uid = user.uid;
-    const localData = readLocal();
-
-    await db.runTransaction(async (tx)=>{
-      const ref = userDocRef(uid);
-      const snap = await tx.get(ref);
-      const remoteData = snap.exists ? (snap.data().bingo_events || {}) : {};
-
-      const merged = mergeEvents(remoteData, localData);
-
-      tx.set(ref, {
-        bingo_events: merged,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-
-      // dejamos local “normalizado” también
-      writeLocal(merged);
+  function mergeBingoDB(localObj, remoteObj){
+    localObj = localObj && typeof localObj === 'object' ? localObj : {};
+    remoteObj = remoteObj && typeof remoteObj === 'object' ? remoteObj : {};
+    var out = Object.assign({}, remoteObj); // start from remote
+    Object.keys(localObj).forEach(function(eventKey){
+      out[eventKey] = mergeEventObjects(remoteObj[eventKey], localObj[eventKey]);
     });
-
-    pendingLocalChanges = false;
-    console.log("[BF Cloud] Local -> Cloud OK");
+    return out;
   }
 
-  async function syncCloudToLocal(){
-    const user = auth.currentUser;
-    if(!user) return;
+function syncLocalToCloud(){
+    var docRef = getUserDocRef();
+    if (!docRef) return;
 
-    const uid = user.uid;
-    const snap = await userDocRef(uid).get();
-    const remoteData = snap.exists ? (snap.data().bingo_events || {}) : {};
+    var localObj = loadLocalDB();
 
-    // mergeando por seguridad (si quedó algo local)
-    const localData = readLocal();
-    const merged = mergeEvents(remoteData, localData);
-
-    // guardamos ambos lados
-    writeLocal(merged);
-
-    // y si había algo local que no estaba en cloud, lo empujamos
-    // (esto evita perder ventas hechas “offline” o antes de auth)
-    await db.set(userDocRef(uid), {
-      bingo_events: merged,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
-
-    console.log("[BF Cloud] Cloud -> Local OK (y normalizado)");
+    // Usar transacción para evitar "pisar" escrituras concurrentes entre dispositivos.
+    db.runTransaction(function(tx){
+      return tx.get(docRef).then(function(snap){
+        var remoteObj = {};
+        if (snap.exists){
+          var data = snap.data() || {};
+          var payload = data.bingo_events;
+          if (payload){
+            try{ remoteObj = typeof payload === 'string' ? JSON.parse(payload) : payload; }catch(_){ remoteObj = {}; }
+          }
+        }
+        var merged = mergeBingoDB(localObj, remoteObj);
+        var payloadOut = JSON.stringify(merged || {});
+        tx.set(docRef, {
+          bingo_events: payloadOut,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+      });
+    }).catch(function(err){
+      console.error('[BF Cloud] Error subiendo datos a la nube', err);
+    });
   }
 
-  // *** LA CLAVE: bootstrap = primero sube local, luego baja cloud ***
-  async function bootstrapSync(){
-    if(bootstrapping) return;
-    bootstrapping = true;
+  function syncCloudToLocal(){
+    var docRef = getUserDocRef();
+    if (!docRef) return;
+    docRef.get().then(function(snap){
+      if (!snap.exists) return;
+      var data = snap.data() || {};
+      var payload = data.bingo_events;
+      if (!payload) return;
+      try{
+        var remoteObj = typeof payload === 'string' ? JSON.parse(payload) : payload;
+        if (!remoteObj || typeof remoteObj !== 'object') return;
+
+        // Mezclar nube + local para no perder cambios locales (por ejemplo, ventas recientes).
+        var localObj = loadLocalDB();
+        var merged = mergeBingoDB(localObj, remoteObj);
+
+        saveLocalDB(merged);
+        console.log('[BF Cloud] Datos de eventos sincronizados desde la nube.');
+      }catch(e){
+        console.error('[BF Cloud] No se pudo aplicar datos desde la nube', e);
+      }
+    }).catch(function(err){
+      console.error('[BF Cloud] Error leyendo datos desde la nube', err);
+    });
+  }
+
+  // Enganchar cambios de localStorage
+  (function(){
     try{
-      // si hubo cambios antes de auth listo, esto los rescata
-      await syncLocalToCloud();
-      await syncCloudToLocal();
-      console.log("[BF Cloud] Bootstrap sync completo.");
+      var originalSetItem = window.localStorage.setItem;
+      window.localStorage.setItem = function(k, v){
+        originalSetItem.call(window.localStorage, k, v);
+        if (syncingFromCloud) return;
+        if (k === 'bingo_events' && auth.currentUser){
+          setTimeout(syncLocalToCloud, 300);
+        }
+      };
     }catch(e){
-      console.error("[BF Cloud] Bootstrap sync error:", e);
-    }finally{
-      bootstrapping = false;
+      console.error('[BF Cloud] No se pudo enganchar localStorage', e);
     }
-  }
+  })();
 
-  // Hook a localStorage.setItem para disparar sync cuando cambie STORAGE_KEY
-  const _setItem = localStorage.setItem.bind(localStorage);
-  localStorage.setItem = function(k, v){
-    _setItem(k, v);
-
-    if(k === STORAGE_KEY){
-      if(auth.currentUser){
-        // mejor en cola microtask para no trabar UI
-        Promise.resolve().then(()=>syncLocalToCloud()).catch(()=>{});
-      }else{
-        pendingLocalChanges = true;
+  // Sincronizar cuando cambie el usuario
+  auth.onAuthStateChanged(function(user){
+    if (user){
+      if (user.uid !== lastUserId){
+        lastUserId = user.uid;
+        syncCloudToLocal();
       }
-    }
-  };
-
-  // Exponer helpers
-  window.BF_SYNC_NOW_FROM_CLOUD = async function(){
-    // conservar compat: solo baja
-    await syncCloudToLocal();
-  };
-
-  window.BF_SYNC_BOOTSTRAP = async function(){
-    await bootstrapSync();
-  };
-
-  // Auth lifecycle
-  auth.onAuthStateChanged(async (user)=>{
-    if(user){
-      await bootstrapSync();
-      // si por alguna razón quedaron cambios pendientes:
-      if(pendingLocalChanges){
-        await bootstrapSync();
-      }
+    }else{
+      lastUserId = null;
     }
   });
 
+  window.BF_SYNC_NOW_FROM_CLOUD = syncCloudToLocal;
+  window.BF_SYNC_NOW_TO_CLOUD   = syncLocalToCloud;
 })();
