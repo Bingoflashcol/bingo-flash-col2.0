@@ -6,7 +6,15 @@
   const norm = (s)=>String(s||'').trim();
 
   function loadDB(){ try{return JSON.parse(localStorage.getItem('bingo_events')||'{}');}catch{ return {}; } }
-  function saveDB(db){ localStorage.setItem('bingo_events', JSON.stringify(db)); }
+  function saveDB(db){
+    try{ localStorage.setItem('bingo_events', JSON.stringify(db)); }
+    catch(e){ console.warn('[Eventos] No se pudo guardar en localStorage', e); }
+    try{ if (window.BF_SYNC_NOW_TO_CLOUD) window.BF_SYNC_NOW_TO_CLOUD(); }catch(_e){}
+  }
+
+  function isDeletedEvent(ev){
+    return !ev || (typeof ev === 'object' && ev.__deleted);
+  }
   function ensureEvent(db, key){
     db[key] = db[key] || { cards:{}, ids:{}, generated:[], won:{}, seq:0, buyers:{}, combos_total:0, individuales_total:0, meta:{}, vendors:{} };
   }
@@ -250,7 +258,9 @@
   function refreshList(){
     const cont = document.getElementById('ev-list'); cont.innerHTML = '';
     const db = loadDB();
-    const keys = Object.keys(db).sort((a,b)=>a.localeCompare(b));
+    const keys = Object.keys(db)
+      .filter(k => !isDeletedEvent(db[k]))
+      .sort((a,b)=>a.localeCompare(b));
     if(!keys.length){
       cont.innerHTML = `<div style="opacity:.75">Aún no hay eventos. Crea uno con “Nuevo evento”.</div>`;
       return;
@@ -327,7 +337,10 @@
     cont.querySelectorAll('.ev-del').forEach(btn=>btn.addEventListener('click', (e)=>{
       const k = e.currentTarget.getAttribute('data-k');
       if(!confirm(`¿Eliminar evento "${k}"? Esta acción no se puede deshacer.`)) return;
-      const db=loadDB(); delete db[k]; saveDB(db);
+      const db=loadDB();
+      // No usar delete: necesitamos que el borrado se propague a cloud.
+      db[k] = { __deleted: true, deletedAt: Date.now() };
+      saveDB(db);
       const eventInput = document.querySelector('#eventId');
       if(eventInput && (eventInput.value||'').trim() === k){ eventInput.value = ''; eventInput.dispatchEvent(new Event('input')); }
       refreshList();

@@ -65,7 +65,19 @@ const genBtn=$('#genBtn'), resetEventBtn=$('#resetEventBtn');
 const outputFmt=$('#outputFmt'), saveEventBtn=$('#saveEventBtn'), loadEventBtn=$('#loadEventBtn');
 const comboCounter=$('#comboCounter');
 function loadDB(){ try{return JSON.parse(localStorage.getItem('bingo_events')||'{}');}catch{ return {}; } }
-function saveDB(db){ localStorage.setItem('bingo_events', JSON.stringify(db)); }
+function saveDB(db){
+  // Guardar siempre en local
+  try{
+    localStorage.setItem('bingo_events', JSON.stringify(db));
+  }catch(e){
+    console.warn('[Bingo] No se pudo guardar en localStorage', e);
+  }
+  // Forzar sync a Firestore si está disponible (en algunos móviles el hook
+  // de localStorage no se dispara de forma confiable).
+  try{
+    if (window.BF_SYNC_NOW_TO_CLOUD) window.BF_SYNC_NOW_TO_CLOUD();
+  }catch(_e){}
+}
 function isSalesLocked(evt){
   try{
     const db = loadDB();

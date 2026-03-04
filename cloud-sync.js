@@ -91,9 +91,21 @@
   function mergeBingoDB(localObj, remoteObj){
     localObj = localObj && typeof localObj === 'object' ? localObj : {};
     remoteObj = remoteObj && typeof remoteObj === 'object' ? remoteObj : {};
-    var out = Object.assign({}, remoteObj); // start from remote
+    // Start from remote, but ignore deletion markers
+    var out = {};
+    Object.keys(remoteObj).forEach(function(eventKey){
+      var rv = remoteObj[eventKey];
+      if (rv && rv.__deleted) return;
+      out[eventKey] = rv;
+    });
     Object.keys(localObj).forEach(function(eventKey){
-      out[eventKey] = mergeEventObjects(remoteObj[eventKey], localObj[eventKey]);
+      var lv = localObj[eventKey];
+      // Propagate deletions so events don't "revive" after refresh.
+      if (lv == null || (lv && lv.__deleted)){
+        delete out[eventKey];
+        return;
+      }
+      out[eventKey] = mergeEventObjects(remoteObj[eventKey], lv);
     });
     return out;
   }
@@ -169,6 +181,12 @@ function syncLocalToCloud(){
     }
   })();
 
+  // Expose a manual push helper. Some mobile browsers don't reliably trigger
+  // the localStorage hook in every scenario, so we can force a sync after saves.
+  window.BF_SYNC_NOW_TO_CLOUD = function(){
+    try{ syncLocalToCloud(); }catch(_e){}
+  };
+
   // Sincronizar cuando cambie el usuario
   auth.onAuthStateChanged(function(user){
     if (user){
@@ -182,5 +200,4 @@ function syncLocalToCloud(){
   });
 
   window.BF_SYNC_NOW_FROM_CLOUD = syncCloudToLocal;
-  window.BF_SYNC_NOW_TO_CLOUD   = syncLocalToCloud;
 })();
