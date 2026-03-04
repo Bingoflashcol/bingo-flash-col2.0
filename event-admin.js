@@ -299,7 +299,7 @@
       if(priceCartonInput){ priceCartonInput.value = (meta.priceCarton != null ? __bf_formatCOP(meta.priceCarton) : ''); }
       var priceComboInput = document.getElementById('ev-price-combo');
       if(priceComboInput){ priceComboInput.value = (meta.priceCombo != null ? __bf_formatCOP(meta.priceCombo) : ''); }
-getElementById('ev-card-color');
+      var selColor = document.getElementById('ev-card-color');
       if(selColor){ selColor.value = meta.cardColor || 'default'; }
 
       // Fecha y hora de cantada
