@@ -102,6 +102,9 @@
       }
       const n = Number(select.value||1);
       const {pages, evt} = await makePages(n);
+      // Importante en iOS: antes de abrir el dialogo de imprimir, subir a la nube
+      if (window.BF_SYNC_FLUSH_NOW){ try{ window.BF_SYNC_FLUSH_NOW(); }catch(_){} }
+
       if (api.downloadPDF) {
         api.downloadPDF(pages, `${evt}.pdf`);
       } else {
@@ -121,6 +124,9 @@
       }
       const n = Number(select.value||1);
       const {pages, evt} = await makePages(n);
+      // Importante en iOS: antes de abrir el dialogo de imprimir, subir a la nube
+      if (window.BF_SYNC_FLUSH_NOW){ try{ window.BF_SYNC_FLUSH_NOW(); }catch(_){} }
+
       pages.forEach((url, idx)=>{
         const blob = dataURLToBlob(url);
         const a = document.createElement('a');
@@ -166,7 +172,10 @@
   function getEvt(){ return (document.querySelector('#eventId')?.value||'default').trim()||'default'; }
 
   function addIndividuals(evt, add){
-    const db=loadDB(); db[evt] = db[evt] || {cards:{}, seq:0, buyers:{}};
+    const db=loadDB(); db[evt] = db[evt] || {
+        cards:{}, ids:{}, won:{}, buyers:{}, vendors:{}, participants:{}, meta:{},
+        seq:0, combos_total:0, individuales_total:0, generated:[]
+      };
     db[evt].individuales_total = ((db[evt].individuales_total|0) + (add|0));
     saveDB(db);
     return db[evt].individuales_total|0;
