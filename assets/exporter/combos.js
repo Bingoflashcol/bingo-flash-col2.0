@@ -2,10 +2,11 @@
 // === Tamaño de combo por evento (default 6) ===
 window.__BF_getEventComboSize = window.__BF_getEventComboSize || function(){
   try{
-    const evt = (document.querySelector('#eventId')?.value||'').trim();
-    const db  = JSON.parse(localStorage.getItem('bingo_events')||'{}');
-    const cs  = db?.[evt]?.meta?.comboSize;
-    const n   = parseInt(cs, 10);
+    var evt = ((document.querySelector('#eventId') && document.querySelector('#eventId').value) || '').trim();
+    var db  = JSON.parse(localStorage.getItem('bingo_events') || '{}');
+    var ev  = (db && db[evt]) ? db[evt] : null;
+    var cs  = (ev && ev.meta) ? ev.meta.comboSize : null;
+    var n   = parseInt(cs, 10);
     return (n && n > 0) ? n : 6;
   }catch(_){ return 6; }
 };
@@ -14,9 +15,11 @@ window.__BF_getEventComboSize = window.__BF_getEventComboSize || function(){
 // === Color de cartón por evento (solo bordes / azules) ===
 window.__BF_getEventCardColor = window.__BF_getEventCardColor || function(){
   try{
-    const evt = (document.querySelector('#eventId')?.value||'').trim();
+    const evt = ((document.querySelector('#eventId') && document.querySelector('#eventId').value)||'').trim();
     const db  = JSON.parse(localStorage.getItem('bingo_events')||'{}');
-    return db?.[evt]?.meta?.cardColor || 'default';
+    var ev  = (db && db[evt]) ? db[evt] : null;
+    var meta = (ev && ev.meta) ? ev.meta : null;
+    return (meta && meta.cardColor) ? meta.cardColor : 'default';
   }catch(_){ return 'default'; }
 };
 
@@ -129,13 +132,13 @@ async function renderCard(card,{width=800,height=860}={}){
 
   // Palette & sizes (permite cambiar solo bordes por evento)
   const __pal = (window.__BF_getCardPalette ? window.__BF_getCardPalette() : null) || null;
-  const BLUE    = __pal?.BLUE    || '#0B1222';
-  const STRIP   = __pal?.STRIP   || '#16253F';
-  const GRID    = __pal?.GRID    || '#2B3A55';
-  const CELL    = __pal?.CELL    || '#FFFFFF';
-  const NUM     = __pal?.NUM     || '#0B1222';
-  const HEADTXT = __pal?.HEADTXT || '#E8F0FF';
-  const CHIP    = __pal?.CHIP    || {B:'#2E6CF9', I:'#F05454', N:'#22C55E', G:'#F59E0B', O:'#8B5CF6'};
+  const BLUE    = (__pal && __pal.BLUE)    || '#0B1222';
+  const STRIP   = (__pal && __pal.STRIP)   || '#16253F';
+  const GRID    = (__pal && __pal.GRID)    || '#2B3A55';
+  const CELL    = (__pal && __pal.CELL)    || '#FFFFFF';
+  const NUM     = (__pal && __pal.NUM)     || '#0B1222';
+  const HEADTXT = (__pal && __pal.HEADTXT) || '#E8F0FF';
+  const CHIP    = (__pal && __pal.CHIP)    || {B:'#2E6CF9', I:'#F05454', N:'#22C55E', G:'#F59E0B', O:'#8B5CF6'};
 
   // Base rounded blue card
   const R=24;
@@ -202,7 +205,7 @@ async function renderCard(card,{width=800,height=860}={}){
   // Footer text BIG and white
   k.fillStyle='#FFFFFF'; k.font='bold 30px system-ui,Segoe UI,Arial';
   k.textAlign='left';  k.fillText(card.id||'', panel.x+18, panel.y+panel.h-FOOTER_H/2+10);
-  const rightBits=[]; if(card.buyer?.name) rightBits.push(card.buyer.name); if(card.buyer?.phone) rightBits.push(card.buyer.phone);
+  const rightBits=[]; if((card.buyer && card.buyer.name)) rightBits.push(card.buyer.name); if((card.buyer && card.buyer.phone)) rightBits.push(card.buyer.phone);
   if(rightBits.length){ k.textAlign='right'; k.fillText(rightBits.join(' - '), panel.x+panel.w-18, panel.y+panel.h-FOOTER_H/2+10); }
 
   return c;
@@ -273,22 +276,22 @@ function generateUniqueCards(n, evt, buyer, avoidRepeat=true){
   return cards;
 }
 async function onGenerate(){
-  const evt=(eventId?.value||'').trim(); 
+  const evt=((eventId && eventId.value)||'').trim(); 
   if(!evt) return alert('Evento es obligatorio');
   if (isSalesLocked(evt)){
     alert('Las ventas de cartones están bloqueadas para este evento. No se pueden generar más cartones.');
     return;
   }
 
-const combos=Math.max(1,Math.min(999, Number(comboCount?.value)||1));
+const combos=Math.max(1,Math.min(999, Number((comboCount && comboCount.value))||1));
   const vendorSel = document.getElementById('buyerVendor');
   const vendorId = vendorSel && vendorSel.value ? String(vendorSel.value).trim() : '';
-  const buyer={name:(buyerName?.value||'').trim(), phone:(buyerPhone?.value||'').trim(), vendorId};
+  const buyer={name:((buyerName && buyerName.value)||'').trim(), phone:((buyerPhone && buyerPhone.value)||'').trim(), vendorId};
   const avoid = true; // siempre evitar repetir combinaciones dentro del evento
   // (ignoramos el checkbox de unicidad para máxima seguridad)
   const pages=[];
   for(let c=0;c<combos;c++){ const six=generateUniqueCards((window.__BF_getEventComboSize?window.__BF_getEventComboSize():6), evt, buyer, avoid); pages.push(await composePage(six)); comboCounter && (comboCounter.textContent=`Combos generados: ${c+1}`); }
-  if(outputFmt?.value==='jpg'){ for(let i=0;i<pages.length;i++){ const a=document.createElement('a'); a.href=pages[i]; a.download=`${evt}-combo-${String(i+1).padStart(3,'0')}.jpg`; document.body.appendChild(a); a.click(); a.remove(); } }
+  if((outputFmt && outputFmt.value)==='jpg'){ for(let i=0;i<pages.length;i++){ const a=document.createElement('a'); a.href=pages[i]; a.download=`${evt}-combo-${String(i+1).padStart(3,'0')}.jpg`; document.body.appendChild(a); a.click(); a.remove(); } }
   else downloadPDF(pages, `${evt}.pdf`);
   addTotalCombos(evt, combos);
       notifyParticipants(evt, buyer, combos);
@@ -300,15 +303,15 @@ const combos=Math.max(1,Math.min(999, Number(comboCount?.value)||1));
 genBtn && genBtn.addEventListener('click', onGenerate);
 
 document.addEventListener('DOMContentLoaded', function(){
-  const evt=(eventId?.value||'').trim()||'default';
+  const evt=((eventId && eventId.value)||'').trim()||'default';
   updateComboCounter(evt);
 });
 eventId && eventId.addEventListener('input', function(){
-  const evt=(eventId?.value||'').trim()||'default';
+  const evt=((eventId && eventId.value)||'').trim()||'default';
   updateComboCounter(evt);
 });
 resetEventBtn && resetEventBtn.addEventListener('click', function(){
-  const evt=(eventId?.value||'').trim()||'default';
+  const evt=((eventId && eventId.value)||'').trim()||'default';
   setTotalCombos(evt, 0);
   updateComboCounter(evt);
 });
@@ -331,7 +334,7 @@ try {
 
 // === Multi-evento: helpers + Guardar/Cargar (mínimo, sin tocar generación) ===
 function ensureEvent(db, evt){
-  db[evt] = db[evt] || { cards:{}, seq:0, buyers:{}, combos_total:(db[evt]?.combos_total|0), individuales_total:(db[evt]?.individuales_total|0) };
+  db[evt] = db[evt] || { cards:{}, seq:0, buyers:{}, combos_total:((db[evt] && db[evt].combos_total)|0), individuales_total:((db[evt] && db[evt].individuales_total)|0) };
   return db;
 }
 function timestampStr(d=new Date()){
@@ -340,7 +343,7 @@ function timestampStr(d=new Date()){
 }
 if (saveEventBtn) saveEventBtn.addEventListener('click', ()=>{
   try{
-    const evt=(eventId?.value||'').trim()||'default';
+    const evt=((eventId && eventId.value)||'').trim()||'default';
     const db=loadDB();
     if(!db[evt]){ alert('No hay datos para este evento.'); return; }
     const payload={eventId:evt, data:db[evt]};
@@ -354,11 +357,11 @@ if (saveEventBtn) saveEventBtn.addEventListener('click', ()=>{
 if (loadEventBtn) loadEventBtn.addEventListener('click', ()=>{
   const inp=document.createElement('input'); inp.type='file'; inp.accept='application/json';
   inp.onchange=async (e)=>{
-    const f=e.target.files?.[0]; if(!f) return;
+    const f=(e.target.files && e.target.files[0]); if(!f) return;
     try{
       const text=await f.text();
       const obj=JSON.parse(text);
-      const eid=obj?.eventId, data=obj?.data;
+      const eid=(obj && obj.eventId), data=(obj && obj.data);
       if(!eid || !data){ alert('Archivo inválido.'); return; }
       const db=loadDB(); ensureEvent(db, eid); db[eid]=data; saveDB(db);
       if(eventId) eventId.value=eid;
@@ -374,69 +377,44 @@ if (loadEventBtn) loadEventBtn.addEventListener('click', ()=>{
 // === Auditoría de IDs / Grillas por evento ===
 function auditEvent(evt){
   try{
-    const db = loadDB(); const ev = db?.[evt];
+    const db = loadDB(); const ev = (db && db[evt]);
     if(!ev){ alert('No existe el evento "'+evt+'".'); return; }
-
-    const idsKeys = Object.keys(ev.ids || {});
-    const cardsKeys = Object.keys(ev.cards || {});
+    const idsObj = ev.ids || {};
+    const cardsObj = ev.cards || {};
     const gen = Array.isArray(ev.generated) ? ev.generated : [];
 
-    const totalIds = idsKeys.length;
-    const dupIds = totalIds - new Set(idsKeys).size;
+    const ids = Object.keys(idsObj);
+    const totalIds = ids.length;
+    const dupIds = totalIds - new Set(ids).size;
 
-    // Conteos "reales" (detalle) a partir de cards/ids
-    const totalCards = cardsKeys.length;
+    // Conteo real (iPhone/Safari a veces deja 'generated' incompleto)
+    const byCards = Object.keys(cardsObj).length;
+    const byGen   = gen.length;
+    const totalDetailed = Math.max(totalIds, byCards, byGen);
 
-    // Conteos declarados por el evento (si existen)
-    const comboSize = Number(ev?.meta?.comboSize || 6);
-    const combosCont = Number(ev.combos_total || 0);
-    const indCont = Number(ev.individuales_total || 0);
-    const expectedByCounters = (combosCont * comboSize) + indCont;
+    const uniqGrids = new Set(
+      gen.map(c => JSON.stringify(c && c.cols ? c.cols : (cardsObj[(c && c.id)] || null)))
+         .filter(Boolean)
+    ).size;
 
-    // Grillas únicas (desde cards si existen; si no, desde generated)
-    const gridSrc = totalCards ? cardsKeys.map(k => ev.cards[k]).filter(Boolean) : gen;
-    const uniqGrids = new Set(gridSrc.map(c => {
-      try{ return JSON.stringify(c.cols || c.grid || c); }catch(_){ return String(Math.random()); }
-    })).size;
-
-    // "Generados" puede ser 1 por combo en algunos flujos, así que lo mostramos aparte
-    const genCount = gen.length;
     alert(
       'Auditoría de "'+evt+'":' +
-      '
-• IDs en tabla: ' + totalIds +
-      '
-• IDs duplicados: ' + dupIds +
-      '
-• Cartones detallados: ' + totalCards +
-      '
-• Individuales (contador): ' + indCont +
-      '
-• Combos (contador): ' + combosCont +
-      '
-• Esperados por contadores: ' + expectedByCounters +
-      '
-• Grillas únicas: ' + uniqGrids +
-      (totalCards && totalIds && totalCards !== totalIds ? ('
-
-⚠️ Ojo: cards('+totalCards+') != ids('+totalIds+').') : '') +
-      (!totalCards && genCount ? ('
-
-Nota: No hay cards detallados; usando "generated" para estimar grillas.') : '')
+      '\n• IDs en tabla: ' + totalIds +
+      '\n• IDs duplicados: ' + dupIds +
+      '\n• Cartones detallados: ' + totalDetailed +
+      '\n• Individuales (contador): ' + (ev.individuales_total|0) +
+      '\n• Combos (contador): ' + (ev.combos_total|0) +
+      '\n• Grillas únicas: ' + uniqGrids
     );
-  }catch(e){
-    console.error(e);
-    alert('No se pudo auditar el evento.');
-  }
+  }catch(e){ console.error(e); alert('No se pudo auditar el evento.'); }
 }
-
 // === Reparación de evento (estructura y datos) ===
 function repairEvent(evt){
   try{
     const db = loadDB(); db[evt] = db[evt] || {}; const ev = db[evt];
     ev.cards ||= {}; ev.ids ||= {}; ev.generated = Array.isArray(ev.generated)?ev.generated:[]; ev.won ||= {};
     ev.buyers ||= {}; ev.combos_total = ev.combos_total|0; ev.individuales_total = ev.individuales_total|0; ev.meta ||= {};
-    for(const c of ev.generated){ if(c?.id) ev.ids[c.id] = 1; }
+    for(const c of ev.generated){ if((c && c.id)) ev.ids[c.id] = 1; }
     let maxSeq = 0; const rx=/^BF-[A-Z0-9]*-([0-9A-Z]{5})-/;
     for(const id of Object.keys(ev.ids)){ const m=rx.exec(String(id)); if(m){ const s=parseInt(m[1],36)||0; if(s>maxSeq) maxSeq=s; } }
     if(!ev.seq || ev.seq < maxSeq) ev.seq = maxSeq;
@@ -446,7 +424,7 @@ function repairEvent(evt){
 }
 document.addEventListener('DOMContentLoaded', function(){
   const auditBtn = document.querySelector('#auditIdsBtn'); 
-  auditBtn && auditBtn.addEventListener('click', function(){ const evt=(eventId?.value||'').trim(); if(!evt) return alert('Primero escribe un evento.'); auditEvent(evt); });
+  auditBtn && auditBtn.addEventListener('click', function(){ const evt=((eventId && eventId.value)||'').trim(); if(!evt) return alert('Primero escribe un evento.'); auditEvent(evt); });
   const repairBtn = document.querySelector('#repairEventBtn'); 
-  repairBtn && repairBtn.addEventListener('click', function(){ const evt=(eventId?.value||'').trim(); if(!evt) return alert('Primero escribe un evento.'); repairEvent(evt); });
+  repairBtn && repairBtn.addEventListener('click', function(){ const evt=((eventId && eventId.value)||'').trim(); if(!evt) return alert('Primero escribe un evento.'); repairEvent(evt); });
 });

@@ -6,7 +6,12 @@
   const norm = (s)=>String(s||'').trim();
 
   function loadDB(){ try{return JSON.parse(localStorage.getItem('bingo_events')||'{}');}catch{ return {}; } }
-  function saveDB(db){ localStorage.setItem('bingo_events', JSON.stringify(db)); }
+  function saveDB(db){ localStorage.setItem('bingo_events', JSON.stringify(db||{})); }
+
+  // Claves internas (metadata) dentro del DB (no deben listarse como eventos)
+  function __bf_isMetaKey(k){
+    return typeof k === 'string' && (k === '__deletedEvents' || k.startsWith('__'));
+  }
   function ensureEvent(db, key){
     db[key] = db[key] || { cards:{}, ids:{}, generated:[], won:{}, seq:0, buyers:{}, combos_total:0, individuales_total:0, meta:{}, vendors:{} };
   }
@@ -250,15 +255,13 @@
   function refreshList(){
     const cont = document.getElementById('ev-list'); cont.innerHTML = '';
     const db = loadDB();
-    const keys = Object.keys(db).sort((a,b)=>a.localeCompare(b));
+    const keys = Object.keys(db).filter(k=>!__bf_isMetaKey(k)).sort((a,b)=>a.localeCompare(b));
     if(!keys.length){
       cont.innerHTML = `<div style="opacity:.75">Aún no hay eventos. Crea uno con “Nuevo evento”.</div>`;
       return;
     }
     keys.forEach(k=>{
       const meta = (db[k] && db[k].meta) || {};
-      // Ocultar eventos eliminados (tombstone)
-      if (meta && (meta.deleted || Number(meta.deletedAt||0)>0)) return;
       const row = document.createElement('div');
       row.style.cssText = "display:flex;align-items:center;gap:10px;padding:10px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:#0f172a";
       row.innerHTML = `
@@ -326,44 +329,16 @@
       }
     }));
 
-    cont.querySelectorAll('.ev-del').forEach(btn=>btn.addEventListener('click', async (e)=>{
+    cont.querySelectorAll('.ev-del').forEach(btn=>btn.addEventListener('click', (e)=>{
       const k = e.currentTarget.getAttribute('data-k');
       if(!confirm(`¿Eliminar evento "${k}"? Esta acción no se puede deshacer.`)) return;
-      const db = loadDB();
-      const now = Date.now();
-      // Tombstone: evita que el evento "reviva" cuando sincroniza desde la nube.
-      const prev = (db && db[k]) ? db[k] : { meta:{} };
-      db[k] = Object.assign({}, prev, {
-        ids: {}, cards: {}, buyers: {}, vendors: {}, won: {}, sales: {},
-        generated: [],
-        combos_total: 0,
-        individuales_total: 0,
-        meta: Object.assign({}, (prev.meta||{}), {
-          id: k,
-          deleted: true,
-          deletedAt: now,
-          updatedAt: now
-        })
-      });
+      const db=loadDB();
+      db.__deletedEvents = db.__deletedEvents || {};
+      db.__deletedEvents[k] = Date.now();
+      delete db[k];
       saveDB(db);
-
       const eventInput = document.querySelector('#eventId');
-      if(eventInput && (eventInput.value||'').trim() === k){
-        eventInput.value = '';
-        eventInput.dispatchEvent(new Event('input'));
-      }
-
-      // Intentar subir inmediatamente a la nube (si existe)
-      try{
-        if (window.BF_SYNC_LOCAL_TO_CLOUD){
-          await window.BF_SYNC_LOCAL_TO_CLOUD();
-        }else if (window.BF_SYNC_NOW_TO_CLOUD){
-          await window.BF_SYNC_NOW_TO_CLOUD();
-        }
-      }catch(err){
-        console.warn('[BF Event Admin] No se pudo sincronizar borrado a la nube', err);
-      }
-
+      if(eventInput && (eventInput.value||'').trim() === k){ eventInput.value = ''; eventInput.dispatchEvent(new Event('input')); }
       refreshList();
     }));
   }
@@ -520,6 +495,9 @@ if(e.target?.id==='ev-save'){
           if(raw){ db[id].meta.figuras = JSON.parse(raw); }
         }catch{}
 
+        db.__deletedEvents = db.__deletedEvents || {};
+        if (db.__deletedEvents[id]) delete db.__deletedEvents[id];
+        db[id].updatedAt = Date.now();
         saveDB(db);
         if(window.__BF_SETUP_SALES_AUTOLOCK){ try{ window.__BF_SETUP_SALES_AUTOLOCK(); }catch(_){}}
         if(window.__BF_UPDATE_AUTO_PROGRESS){
