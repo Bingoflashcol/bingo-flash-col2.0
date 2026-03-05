@@ -401,7 +401,6 @@ function auditEvent(evt){
 
     // "Generados" puede ser 1 por combo en algunos flujos, así que lo mostramos aparte
     const genCount = gen.length;
-
     alert(
       'Auditoría de "'+evt+'":' +
       '
