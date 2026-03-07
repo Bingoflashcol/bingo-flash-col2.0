@@ -374,15 +374,54 @@ if (loadEventBtn) loadEventBtn.addEventListener('click', ()=>{
 // === Auditoría de IDs / Grillas por evento ===
 function auditEvent(evt){
   try{
-    const db = loadDB(); const ev = db?.[evt];
+    const db = loadDB();
+    const ev = db && db[evt];
     if(!ev){ alert('No existe el evento "'+evt+'".'); return; }
-    const ids = Object.keys(ev.ids || {});
-    const gen = Array.isArray(ev.generated) ? ev.generated : [];
-    const totalIds = ids.length;
-    const totalGen = gen.length;
-    const dupIds = totalIds - new Set(ids).size;
-    const uniqGrids = new Set(gen.map(c => JSON.stringify(c.cols))).size;
-    alert('Auditoría de "'+evt+'":\n• IDs en tabla: '+totalIds+'\n• IDs duplicados: '+dupIds+'\n• Cartones generados: '+totalGen+'\n• Grillas únicas: '+uniqGrids);
+
+    const idsMap = (ev.ids && typeof ev.ids==='object') ? ev.ids : {};
+    const cardsMap = (ev.cards && typeof ev.cards==='object') ? ev.cards : {};
+
+    const ids = Object.keys(idsMap);
+    let dupIds = 0;
+    for(const id of ids){ if((idsMap[id]|0) > 1) dupIds++; }
+
+    const detailed = Object.keys(cardsMap).length;
+    const indTotal = (ev.individuales_total|0);
+    const comboTotal = (ev.combos_total|0);
+
+    const uniq = new Set();
+    const addCols = (cols)=>{ if(Array.isArray(cols)) { try{ uniq.add(JSON.stringify(cols)); }catch(_){ } } };
+
+    for(const id of Object.keys(cardsMap)){
+      const c = cardsMap[id];
+      if(c && Array.isArray(c.cols)) addCols(c.cols);
+    }
+
+    // Fallback: versiones viejas guardaban `generated` como array de strings "id|[cols]".
+    if(uniq.size===0 && Array.isArray(ev.generated)){
+      for(const row of ev.generated){
+        if(typeof row !== 'string') continue;
+        const p = row.split('|');
+        if(p.length<2) continue;
+        try{ addCols(JSON.parse(p[1])); }catch(_){ }
+      }
+    }
+
+    alert(
+      'Auditoría de "'+evt+'":
+' +
+      '• IDs en tabla: ' + ids.length + '
+' +
+      '• IDs duplicados: ' + dupIds + '
+' +
+      '• Cartones detallados: ' + detailed + '
+' +
+      '• Individuales (contador): ' + indTotal + '
+' +
+      '• Combos (contador): ' + comboTotal + '
+' +
+      '• Grillas únicas: ' + uniq.size
+    );
   }catch(e){ console.error(e); alert('No se pudo auditar el evento.'); }
 }
 // === Reparación de evento (estructura y datos) ===

@@ -85,12 +85,38 @@
   }
 
   function mergeBingoDB(localObj, remoteObj){
-    localObj = localObj && typeof localObj === 'object' ? localObj : {};
-    remoteObj = remoteObj && typeof remoteObj === 'object' ? remoteObj : {};
-    var out = Object.assign({}, remoteObj);
-    Object.keys(localObj).forEach(function(eventKey){
-      out[eventKey] = mergeEventObjects(remoteObj[eventKey], localObj[eventKey]);
+    var L = localObj && typeof localObj === 'object' ? localObj : {};
+    var R = remoteObj && typeof remoteObj === 'object' ? remoteObj : {};
+
+    // Tombstones: unión (si un lado eliminó, NO se revive)
+    var del = Object.assign({}, (R.__deletedEvents||{}), (L.__deletedEvents||{}));
+
+    // Partimos de remoto
+    var out = Object.assign({}, R);
+
+    // Asegurar tombstones
+    if (Object.keys(del).length){
+      out.__deletedEvents = del;
+    }else{
+      delete out.__deletedEvents;
+    }
+
+    // Mezcla eventos (local gana)
+    Object.keys(L).forEach(function(eventKey){
+      if (!eventKey) return;
+      if (eventKey === '__deletedEvents' || eventKey === '__meta' || eventKey === '_deletedEvents') return;
+      if (eventKey.charAt(0) === '_') return; // meta
+      if (del && del[eventKey]) return; // eliminado
+      out[eventKey] = mergeEventObjects(R[eventKey], L[eventKey]);
     });
+
+    // Eliminar de salida los eventos borrados
+    Object.keys(del).forEach(function(k){
+      if (k && out[k]) delete out[k];
+    });
+
+    // Evitar meta vieja como evento
+    delete out._deletedEvents;
     return out;
   }
 
