@@ -87,30 +87,10 @@
   function mergeBingoDB(localObj, remoteObj){
     localObj = localObj && typeof localObj === 'object' ? localObj : {};
     remoteObj = remoteObj && typeof remoteObj === 'object' ? remoteObj : {};
-
-    var localDeleted = (localObj.__deletedEvents && typeof localObj.__deletedEvents === 'object') ? localObj.__deletedEvents : {};
-    var remoteDeleted = (remoteObj.__deletedEvents && typeof remoteObj.__deletedEvents === 'object') ? remoteObj.__deletedEvents : {};
-    var deleted = Object.assign({}, remoteDeleted, localDeleted);
-
-    var out = {};
-    Object.keys(remoteObj).forEach(function(eventKey){
-      if (eventKey === '__deletedEvents') return;
-      if (eventKey.charAt(0) === '_') return;
-      if (deleted[eventKey]) return;
-      out[eventKey] = remoteObj[eventKey];
-    });
+    var out = Object.assign({}, remoteObj);
     Object.keys(localObj).forEach(function(eventKey){
-      if (eventKey === '__deletedEvents') return;
-      if (eventKey.charAt(0) === '_') return;
-      if (deleted[eventKey]) {
-        delete out[eventKey];
-        return;
-      }
       out[eventKey] = mergeEventObjects(remoteObj[eventKey], localObj[eventKey]);
     });
-    if (Object.keys(deleted).length){
-      out.__deletedEvents = deleted;
-    }
     return out;
   }
 

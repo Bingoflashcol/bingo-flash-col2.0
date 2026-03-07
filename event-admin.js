@@ -250,8 +250,7 @@
   function refreshList(){
     const cont = document.getElementById('ev-list'); cont.innerHTML = '';
     const db = loadDB();
-    const deleted = (db.__deletedEvents && typeof db.__deletedEvents === 'object') ? db.__deletedEvents : {};
-    const keys = Object.keys(db).filter(k => k && k !== '__deletedEvents' && !k.startsWith('_') && !deleted[k] && !(db[k] && db[k].meta && db[k].meta.deleted)).sort((a,b)=>a.localeCompare(b));
+    const keys = Object.keys(db).sort((a,b)=>a.localeCompare(b));
     if(!keys.length){
       cont.innerHTML = `<div style="opacity:.75">Aún no hay eventos. Crea uno con “Nuevo evento”.</div>`;
       return;
@@ -328,7 +327,7 @@
     cont.querySelectorAll('.ev-del').forEach(btn=>btn.addEventListener('click', (e)=>{
       const k = e.currentTarget.getAttribute('data-k');
       if(!confirm(`¿Eliminar evento "${k}"? Esta acción no se puede deshacer.`)) return;
-      const db=loadDB(); db.__deletedEvents = (db.__deletedEvents && typeof db.__deletedEvents === 'object') ? db.__deletedEvents : {}; db.__deletedEvents[k] = Date.now(); delete db[k]; saveDB(db);
+      const db=loadDB(); delete db[k]; saveDB(db);
       const eventInput = document.querySelector('#eventId');
       if(eventInput && (eventInput.value||'').trim() === k){ eventInput.value = ''; eventInput.dispatchEvent(new Event('input')); }
       refreshList();
