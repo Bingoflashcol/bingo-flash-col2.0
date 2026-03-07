@@ -85,38 +85,32 @@
   }
 
   function mergeBingoDB(localObj, remoteObj){
-    var L = localObj && typeof localObj === 'object' ? localObj : {};
-    var R = remoteObj && typeof remoteObj === 'object' ? remoteObj : {};
+    localObj = localObj && typeof localObj === 'object' ? localObj : {};
+    remoteObj = remoteObj && typeof remoteObj === 'object' ? remoteObj : {};
 
-    // Tombstones: unión (si un lado eliminó, NO se revive)
-    var del = Object.assign({}, (R.__deletedEvents||{}), (L.__deletedEvents||{}));
+    var localDeleted = (localObj.__deletedEvents && typeof localObj.__deletedEvents === 'object') ? localObj.__deletedEvents : {};
+    var remoteDeleted = (remoteObj.__deletedEvents && typeof remoteObj.__deletedEvents === 'object') ? remoteObj.__deletedEvents : {};
+    var deleted = Object.assign({}, remoteDeleted, localDeleted);
 
-    // Partimos de remoto
-    var out = Object.assign({}, R);
-
-    // Asegurar tombstones
-    if (Object.keys(del).length){
-      out.__deletedEvents = del;
-    }else{
-      delete out.__deletedEvents;
+    var out = {};
+    Object.keys(remoteObj).forEach(function(eventKey){
+      if (eventKey === '__deletedEvents') return;
+      if (eventKey.charAt(0) === '_') return;
+      if (deleted[eventKey]) return;
+      out[eventKey] = remoteObj[eventKey];
+    });
+    Object.keys(localObj).forEach(function(eventKey){
+      if (eventKey === '__deletedEvents') return;
+      if (eventKey.charAt(0) === '_') return;
+      if (deleted[eventKey]) {
+        delete out[eventKey];
+        return;
+      }
+      out[eventKey] = mergeEventObjects(remoteObj[eventKey], localObj[eventKey]);
+    });
+    if (Object.keys(deleted).length){
+      out.__deletedEvents = deleted;
     }
-
-    // Mezcla eventos (local gana)
-    Object.keys(L).forEach(function(eventKey){
-      if (!eventKey) return;
-      if (eventKey === '__deletedEvents' || eventKey === '__meta' || eventKey === '_deletedEvents') return;
-      if (eventKey.charAt(0) === '_') return; // meta
-      if (del && del[eventKey]) return; // eliminado
-      out[eventKey] = mergeEventObjects(R[eventKey], L[eventKey]);
-    });
-
-    // Eliminar de salida los eventos borrados
-    Object.keys(del).forEach(function(k){
-      if (k && out[k]) delete out[k];
-    });
-
-    // Evitar meta vieja como evento
-    delete out._deletedEvents;
     return out;
   }
 
